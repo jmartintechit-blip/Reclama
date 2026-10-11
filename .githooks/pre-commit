@@ -1,0 +1,6 @@
+#!/bin/sh
+# Same checks as CI, run before every commit. `npm install` activates this folder via core.hooksPath.
+set -e
+npm run --silent lint
+npm run --silent typecheck
+npm run --silent format:check

@@ -1,0 +1,4 @@
+# npm writes the lockfile in its own format
+package-lock.json
+# Approved plan, kept verbatim (Prettier would re-align its tables)
+docs/PLAN.md
