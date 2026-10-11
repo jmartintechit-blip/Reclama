@@ -8,6 +8,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env server/dev.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -15,8 +16,12 @@
     "format:check": "prettier --check .",
     "prepare": "git config core.hooksPath .githooks || exit 0"
   },
+  "dependencies": {
+    "express": "^5.3.0"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.19.2",
     "eslint": "^10.12.0",
     "prettier": "^3.9.10",

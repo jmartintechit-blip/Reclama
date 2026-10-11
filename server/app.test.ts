@@ -1,0 +1,188 @@
+import { once } from 'node:events';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import express, { type Express } from 'express';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockInstance,
+  vi,
+} from 'vitest';
+import { createApp } from './app.ts';
+import { errorHandler } from './middleware/errors.ts';
+import { requestId } from './middleware/request-id.ts';
+
+const UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+// A real HTTP server on a random free port, reachable only from this machine.
+async function listen(
+  app: Express,
+): Promise<{ server: Server; baseUrl: string }> {
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = server.address() as AddressInfo;
+  return { server, baseUrl: `http://127.0.0.1:${String(port)}` };
+}
+
+function close(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+// The error shape of plan section 5, whose request_id must be the one sent in the X-Request-Id header.
+function errorBody(res: Response, code: string, message: string) {
+  return {
+    error: { code, message, request_id: res.headers.get('x-request-id') },
+  };
+}
+
+describe('createApp', () => {
+  let server: Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    ({ server, baseUrl } = await listen(createApp()));
+  });
+
+  afterAll(async () => {
+    await close(server);
+  });
+
+  it('answers GET /api/health with 200 and the status body', async () => {
+    const res = await fetch(`${baseUrl}/api/health`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { status: 'ok' } });
+  });
+
+  it('sends a different X-Request-Id UUID with every response', async () => {
+    const first = await fetch(`${baseUrl}/api/health`);
+    const second = await fetch(`${baseUrl}/api/health`);
+    await Promise.all([first.text(), second.text()]);
+
+    const firstId = first.headers.get('x-request-id');
+    const secondId = second.headers.get('x-request-id');
+    expect(firstId).toMatch(UUID_V4);
+    expect(secondId).toMatch(UUID_V4);
+    expect(firstId).not.toBe(secondId);
+  });
+
+  it('ignores an X-Request-Id sent by the client', async () => {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      headers: { 'X-Request-Id': 'chosen-by-the-client' },
+    });
+    await res.text();
+
+    expect(res.headers.get('x-request-id')).toMatch(UUID_V4);
+  });
+
+  it('does not send the x-powered-by header', async () => {
+    const res = await fetch(`${baseUrl}/api/health`);
+    await res.text();
+
+    expect(res.headers.has('x-powered-by')).toBe(false);
+  });
+
+  it('answers an unknown route with 404 NOT_FOUND', async () => {
+    const res = await fetch(`${baseUrl}/api/does-not-exist`);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual(errorBody(res, 'NOT_FOUND', 'Not found'));
+  });
+
+  // The JSON parser runs before routing, so the next two tests can post to any path.
+  it('answers a malformed JSON body with 400 INVALID_JSON', async () => {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"broken":',
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      errorBody(res, 'INVALID_JSON', 'Request body is not valid JSON'),
+    );
+  });
+
+  it('answers a body over the limit with 413 PAYLOAD_TOO_LARGE', async () => {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 'a'.repeat(20_000) }), // the limit in app.ts is 10 kB
+    });
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual(
+      errorBody(res, 'PAYLOAD_TOO_LARGE', 'Request body is too large'),
+    );
+  });
+});
+
+describe('errorHandler with an unexpected error', () => {
+  const secret = 'ana@example.com'; // stands for any personal data an error message could carry
+  let server: Server;
+  let baseUrl: string;
+  let consoleError: MockInstance<typeof console.error>;
+
+  beforeAll(async () => {
+    // Not createApp(): a bare app with a route that throws, so the app has no test-only hooks.
+    const app = express();
+    app.use(requestId);
+    app.get('/boom', () => {
+      throw new Error(`the database rejected the row of ${secret}`);
+    });
+    app.use(errorHandler);
+    ({ server, baseUrl } = await listen(app));
+  });
+
+  afterAll(async () => {
+    await close(server);
+  });
+
+  beforeEach(() => {
+    consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    consoleError.mockRestore();
+  });
+
+  it('answers 500 INTERNAL_ERROR and leaks nothing', async () => {
+    const res = await fetch(`${baseUrl}/boom`);
+
+    expect(res.status).toBe(500);
+    // Exact match: no message, no stack, no extra field.
+    expect(await res.json()).toEqual(
+      errorBody(res, 'INTERNAL_ERROR', 'Internal server error'),
+    );
+  });
+
+  it('logs one JSON line with only the level, the request id and the error name', async () => {
+    const res = await fetch(`${baseUrl}/boom`);
+    await res.text();
+
+    expect(consoleError).toHaveBeenCalledOnce();
+    const line = String(consoleError.mock.calls[0]?.[0]);
+    expect(JSON.parse(line)).toEqual({
+      level: 'error',
+      request_id: res.headers.get('x-request-id'),
+      error_name: 'Error',
+    });
+    expect(line).not.toContain(secret);
+  });
+});
