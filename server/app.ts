@@ -2,6 +2,7 @@ import express from 'express';
 import { errorHandler, notFoundHandler } from './middleware/errors.ts';
 import { requestId } from './middleware/request-id.ts';
 import { healthRouter } from './routes/health.ts';
+import { smokeRouter } from './routes/smoke.ts';
 
 export function createApp() {
   const app = express();
@@ -13,6 +14,7 @@ export function createApp() {
   app.use(express.json({ limit: '10kb' }));
 
   app.use(healthRouter);
+  app.use(smokeRouter);
 
   // After all the routes: the not-found handler catches what no route matched,
   // and the error handler must be the last middleware to receive every error.

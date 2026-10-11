@@ -1,7 +1,5 @@
-import { once } from 'node:events';
 import type { Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import express, { type Express } from 'express';
+import express from 'express';
 import {
   afterAll,
   afterEach,
@@ -16,31 +14,10 @@ import {
 import { createApp } from './app.ts';
 import { errorHandler } from './middleware/errors.ts';
 import { requestId } from './middleware/request-id.ts';
+import { close, listen } from './test-utils.ts';
 
 const UUID_V4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-
-// A real HTTP server on a random free port, reachable only from this machine.
-async function listen(
-  app: Express,
-): Promise<{ server: Server; baseUrl: string }> {
-  const server = app.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const { port } = server.address() as AddressInfo;
-  return { server, baseUrl: `http://127.0.0.1:${String(port)}` };
-}
-
-function close(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.close((error) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    });
-  });
-}
 
 // The error shape of plan section 5, whose request_id must be the one sent in the X-Request-Id header.
 function errorBody(res: Response, code: string, message: string) {
