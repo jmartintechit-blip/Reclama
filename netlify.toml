@@ -1,0 +1,6 @@
+[functions]
+# pdfkit reads its standard-font data at runtime through createRequire and a "#standard-fonts/*" import
+# map. Inlined into the esbuild bundle that breaks ("Cannot find module '#standard-fonts/Helvetica'", so
+# the PDF endpoint answers 500). As an external module it is shipped, with its own dependencies, next to
+# the bundle. Checked only with a local esbuild emulation: the day-3 deployment check (T07) must prove it.
+external_node_modules = ["pdfkit"]

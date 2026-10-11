@@ -1,6 +1,7 @@
 import express from 'express';
 import { errorHandler, notFoundHandler } from './middleware/errors.ts';
 import { requestId } from './middleware/request-id.ts';
+import { securityHeaders } from './middleware/security-headers.ts';
 import { healthRouter } from './routes/health.ts';
 import { smokeRouter } from './routes/smoke.ts';
 
@@ -8,6 +9,8 @@ export function createApp() {
   const app = express();
 
   app.disable('x-powered-by'); // do not advertise the framework and its version
+  app.set('etag', false); // every answer is "no-store", so a weak ETag would only add bytes
+  app.use(securityHeaders); // first, so that errors and 404s get the headers too
   app.use(requestId);
   // Small on purpose: normal JSON bodies in this API are a few fields.
   // The CSV import route will need a bigger limit later (up to 1 MB, plan section 4.8).
