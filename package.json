@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env server/dev.ts",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -20,6 +21,7 @@
     "@netlify/aws-lambda-compat": "^2.0.2",
     "express": "^5.3.0",
     "pdfkit": "^0.20.2",
+    "pg": "^8.23.1",
     "serverless-http": "^4.0.0"
   },
   "devDependencies": {
@@ -27,6 +29,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^24.19.2",
     "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.23.1",
     "eslint": "^10.12.0",
     "prettier": "^3.9.10",
     "typescript": "~5.9.3",
