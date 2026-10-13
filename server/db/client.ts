@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { pgTypes } from './types.ts';
 
 // Pool settings for a serverless Function that talks to Neon through its pooler:
 // - max 3: one Function instance handles one request at a time and a request needs one
@@ -16,6 +17,7 @@ export function createPool(connectionString: string): Pool {
     connectionTimeoutMillis: 5_000,
     statement_timeout: 5_000,
     idleTimeoutMillis: 10_000,
+    types: pgTypes, // int8 as number, date as text (see types.ts)
   });
 
   // An error on an idle client with no listener would crash the process. As in the error
