@@ -1,23 +1,47 @@
 import express from 'express';
+import { systemClock } from './clock.ts';
 import { errorHandler, notFoundHandler } from './middleware/errors.ts';
 import { requestId } from './middleware/request-id.ts';
+import { createRequireSession } from './middleware/require-session.ts';
 import { securityHeaders } from './middleware/security-headers.ts';
 import type { Db } from './db/client.ts';
-import { createHealthRouter } from './routes/health.ts';
+import type { Clock } from './domain/dates.ts';
+import { createRouteRegistry } from './http/routes.ts';
+import { registerAuthRoutes } from './routes/auth.ts';
+import { registerHealthRoutes } from './routes/health.ts';
+import { registerMeRoutes } from './routes/me.ts';
 
-// `mailer` and `clock` will join `db` here later (plan section 2).
-export function createApp({ db }: { db?: Db } = {}) {
+// Without a database the app still starts (liveness must work); every query then fails.
+const noDb: Db = {
+  query: () => Promise.reject(new Error('No database configured')),
+};
+
+// `mailer` will join `db` and `clock` here later (plan section 2).
+export function createApp({
+  db,
+  clock = systemClock,
+}: { db?: Db; clock?: Clock } = {}) {
   const app = express();
 
   app.disable('x-powered-by'); // do not advertise the framework and its version
   app.set('etag', false); // every answer is "no-store", so a weak ETag would only add bytes
   app.use(securityHeaders); // first, so that errors and 404s get the headers too
   app.use(requestId);
+  // T16 plugs the rate limiter and the origin guard in here, before the body is read.
   // Small on purpose: normal JSON bodies in this API are a few fields.
   // The CSV import route will need a bigger limit later (up to 1 MB, plan section 4.8).
   app.use(express.json({ limit: '10kb' }));
 
-  app.use(createHealthRouter(db));
+  // Request flow (plan section 1): request id -> [rate limit] -> [origin guard] -> session ->
+  // validation -> handler. The last three are applied by defineRoute to each route, in that order.
+  const sessionDb = db ?? noDb;
+  const defineRoute = createRouteRegistry(
+    app,
+    createRequireSession(sessionDb, clock),
+  );
+  registerHealthRoutes(defineRoute, db);
+  registerAuthRoutes(defineRoute, { db: sessionDb, clock });
+  registerMeRoutes(defineRoute);
 
   // After all the routes: the not-found handler catches what no route matched,
   // and the error handler must be the last middleware to receive every error.

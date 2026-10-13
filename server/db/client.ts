@@ -31,7 +31,7 @@ export function createPool(connectionString: string): Pool {
 
 // What the app needs from the database. A pg.Pool satisfies it, and tests pass a fake.
 export interface Db {
-  query(sql: string): Promise<{ rows: unknown[] }>;
+  query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
 }
 
 // Same rule as scripts/migrate.ts. Without a valid URL the app still starts (liveness must work),

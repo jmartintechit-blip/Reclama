@@ -12,6 +12,7 @@ import {
   vi,
 } from 'vitest';
 import { createApp } from './app.ts';
+import { getRegisteredRoutes } from './http/routes.ts';
 import { errorHandler } from './middleware/errors.ts';
 import { requestId } from './middleware/request-id.ts';
 import { close, listen } from './test-utils.ts';
@@ -105,6 +106,27 @@ describe('createApp', () => {
     expect(await res.json()).toEqual(
       errorBody(res, 'PAYLOAD_TOO_LARGE', 'Request body is too large'),
     );
+  });
+});
+
+describe('the route registry of createApp', () => {
+  it('lists every route with its auth, and only health and the auth entry points are public', () => {
+    expect(getRegisteredRoutes(createApp())).toEqual([
+      { method: 'GET', path: '/api/health', auth: 'public' },
+      { method: 'GET', path: '/api/health/ready', auth: 'public' },
+      { method: 'POST', path: '/api/auth/register', auth: 'public' },
+      { method: 'POST', path: '/api/auth/login', auth: 'public' },
+      { method: 'POST', path: '/api/auth/logout', auth: 'session' },
+      { method: 'GET', path: '/api/me', auth: 'session' },
+    ]);
+  });
+
+  it('builds a new registry for every app, so apps never share routes', () => {
+    const first = createApp();
+    const second = createApp();
+
+    expect(getRegisteredRoutes(first)).toHaveLength(6);
+    expect(getRegisteredRoutes(second)).toHaveLength(6);
   });
 });
 

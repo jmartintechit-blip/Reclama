@@ -16,6 +16,8 @@ export interface NetlifyContext {
 // X-Forwarded-For is never used: the client chooses what it says.
 const CLIENT_IP_HEADER = 'x-nf-client-connection-ip';
 
+const NO_BODY_STATUSES = new Set([204, 205, 304]);
+
 export function createNetlifyHandler(app: Express) {
   const handle = serverless(app, {
     // Without this, a PDF body is read as UTF-8 text and its bytes are damaged. JSON stays text.
@@ -32,7 +34,12 @@ export function createNetlifyHandler(app: Express) {
       { ...event, requestContext: { identity: { sourceIp } } },
       context,
     );
-    return result as HandlerResponse;
+    const response = result as HandlerResponse;
+    // serverless-http sends body "" for these statuses, and `new Response("", { status: 204 })`
+    // throws: a response with one of them must have no body at all.
+    return NO_BODY_STATUSES.has(response.statusCode)
+      ? { ...response, body: undefined }
+      : response;
   };
 
   return withLambda(withRequestContext) as (

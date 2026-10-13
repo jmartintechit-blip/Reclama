@@ -1,16 +1,17 @@
 import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { getRequestId } from './request-id.ts';
 
-// The error shape of the API (plan section 5). `details` will be added with validation errors.
+// The error shape of the API (plan section 5). `details` is only sent with validation errors.
 export function sendError(
   res: Response,
   status: number,
   code: string,
   message: string,
+  details?: unknown,
 ): void {
-  res
-    .status(status)
-    .json({ error: { code, message, request_id: getRequestId(res) } });
+  res.status(status).json({
+    error: { code, message, request_id: getRequestId(res), details },
+  });
 }
 
 export const notFoundHandler: RequestHandler = (_req, res) => {

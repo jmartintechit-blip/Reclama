@@ -10,6 +10,7 @@ import {
   vi,
 } from 'vitest';
 import { createApp } from './app.ts';
+import { createTestDb } from './db/test-db.ts';
 import { errorHandler } from './middleware/errors.ts';
 import { requestId } from './middleware/request-id.ts';
 import {
@@ -111,6 +112,51 @@ describe('createNetlifyHandler with the real app', () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual(errorBody(res, 'NOT_FOUND', 'Not found'));
+  });
+});
+
+describe('createNetlifyHandler with the session cookie of the real app', () => {
+  it('delivers exactly one Set-Cookie on register and logout, and the Cookie header on the way in', async () => {
+    const db = await createTestDb();
+    try {
+      const handler = createNetlifyHandler(createApp({ db }));
+      const register = await handler(
+        new Request('http://localhost/api/auth/register', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            email: 'adapter@example.com',
+            password: 'correct horse battery',
+          }),
+        }),
+        context,
+      );
+
+      expect(register.status).toBe(201);
+      const cookies = register.headers.getSetCookie();
+      expect(cookies).toHaveLength(1);
+      expect(cookies[0]).toMatch(/^__Host-sid=[A-Za-z0-9_-]{43}; /);
+      expect(cookies[0]).toMatch(/; HttpOnly; Secure; SameSite=Lax$/);
+      const cookie = (cookies[0] ?? '').split(';')[0] ?? '';
+
+      const me = await handler(
+        new Request('http://localhost/api/me', { headers: { cookie } }),
+        context,
+      );
+      expect(me.status).toBe(200);
+
+      const logout = await handler(
+        new Request('http://localhost/api/auth/logout', {
+          method: 'POST',
+          headers: { cookie },
+        }),
+        context,
+      );
+      expect(logout.status).toBe(204);
+      expect(logout.headers.getSetCookie()).toHaveLength(1);
+    } finally {
+      await db.close();
+    }
   });
 });
 
