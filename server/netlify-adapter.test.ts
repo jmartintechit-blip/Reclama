@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import express from 'express';
 import {
   afterEach,
@@ -100,6 +101,32 @@ describe('createNetlifyHandler with the real app', () => {
       'attachment; filename="smoke.pdf"',
     );
     expect(bytes.equals(await renderSmokePdf())).toBe(true);
+  });
+
+  // TEMPORARY, with the echo-bytes probe. "Muñoz S.L.;1.234,56;31/12/2025\r\n" in windows-1252 (ñ = 0xf1).
+  it('keeps windows-1252 bytes sent as base64 inside JSON intact', async () => {
+    const csv = Buffer.concat([
+      Buffer.from('Mu', 'latin1'),
+      Buffer.from([0xf1]),
+      Buffer.from('oz S.L.;1.234,56;31/12/2025\r\n', 'latin1'),
+    ]);
+
+    const res = await api(
+      new Request('http://localhost/api/smoke/echo-bytes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv_base64: csv.toString('base64') }),
+      }),
+      context,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      data: {
+        bytes: csv.length,
+        sha256: createHash('sha256').update(csv).digest('hex'),
+      },
+    });
   });
 
   it('keeps the 404 error shape', async () => {

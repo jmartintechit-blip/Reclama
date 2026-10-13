@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Server } from 'node:http';
 import { inflateSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -108,4 +109,135 @@ describe('renderSmokePdf', () => {
       vi.useRealTimers();
     }
   });
+});
+
+// TEMPORARY probes, deleted together with the PDF smoke endpoint after the T08 gate.
+// "Muñoz S.L.;1.234,56;31/12/2025\r\n" in windows-1252: the ñ is the single byte 0xf1 (in UTF-8 it would be c3 b1).
+const WINDOWS_1252_CSV = Buffer.concat([
+  Buffer.from('Mu', 'latin1'),
+  Buffer.from([0xf1]),
+  Buffer.from('oz S.L.;1.234,56;31/12/2025\r\n', 'latin1'),
+]);
+
+describe('temporary probe endpoints', () => {
+  let server: Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    ({ server, baseUrl } = await listen(createApp()));
+  });
+
+  afterAll(async () => {
+    await close(server);
+  });
+
+  function postEchoBytes(body: string) {
+    return fetch(`${baseUrl}/api/smoke/echo-bytes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+  }
+
+  it('GET /api/smoke/probe reports the runtime and two argon2id timings', async () => {
+    const res = await fetch(`${baseUrl}/api/smoke/probe`);
+    const { data } = (await res.json()) as {
+      data: {
+        node: string;
+        ip: unknown;
+        argon2: { available: boolean; first_ms: unknown; second_ms: unknown };
+      };
+    };
+
+    expect(res.status).toBe(200);
+    expect(data.node).toMatch(/^v\d+\./);
+    expect(['string', 'object']).toContain(typeof data.ip); // a string, or null
+    expect(data.argon2.available).toBe(true);
+    expect(Number.isInteger(data.argon2.first_ms)).toBe(true);
+    expect(Number.isInteger(data.argon2.second_ms)).toBe(true);
+  });
+
+  it('GET /api/smoke/cookie?n=1 sets one Set-Cookie header with the hardened attributes', async () => {
+    const res = await fetch(`${baseUrl}/api/smoke/cookie?n=1`);
+
+    const cookies = res.headers.getSetCookie();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { set: 1 } });
+    expect(cookies).toHaveLength(1);
+    expect(cookies[0]).toMatch(/^__Host-probe1=1; /);
+    for (const attribute of [
+      'Path=/',
+      'Secure',
+      'HttpOnly',
+      'SameSite=Lax',
+      'Max-Age=60',
+    ]) {
+      expect(cookies[0]?.split('; ')).toContain(attribute);
+    }
+  });
+
+  it('GET /api/smoke/cookie?n=2 sets two Set-Cookie headers', async () => {
+    const res = await fetch(`${baseUrl}/api/smoke/cookie?n=2`);
+
+    expect(await res.json()).toEqual({ data: { set: 2 } });
+    expect(
+      res.headers.getSetCookie().map((cookie) => cookie.split('=')[0]),
+    ).toEqual(['__Host-probe1', '__Host-probe2']);
+  });
+
+  it.each(['?n=3', '?n=', '?n=1&n=2', ''])(
+    'GET /api/smoke/cookie%s answers 400 INVALID_QUERY and sets no cookie',
+    async (query) => {
+      const res = await fetch(`${baseUrl}/api/smoke/cookie${query}`);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.getSetCookie()).toHaveLength(0);
+      expect(await res.json()).toEqual({
+        error: {
+          code: 'INVALID_QUERY',
+          message: 'n must be 1 or 2',
+          request_id: res.headers.get('x-request-id'),
+        },
+      });
+    },
+  );
+
+  it('POST /api/smoke/echo-bytes returns the size and SHA-256 of the decoded windows-1252 bytes', async () => {
+    const res = await postEchoBytes(
+      JSON.stringify({ csv_base64: WINDOWS_1252_CSV.toString('base64') }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      data: {
+        bytes: WINDOWS_1252_CSV.length,
+        sha256: createHash('sha256').update(WINDOWS_1252_CSV).digest('hex'),
+      },
+    });
+  });
+
+  it.each([
+    ['an array', '[]'],
+    ['an object without the field', '{}'],
+    ['a field that is not a string', '{"csv_base64":42}'],
+    ['characters outside the alphabet', '{"csv_base64":"TXVub3o!"}'],
+    ['a line break inside', '{"csv_base64":"TXVu\\nb3o="}'],
+    ['missing padding', '{"csv_base64":"TXVub3o"}'],
+    ['too much padding', '{"csv_base64":"TXVub3o=="}'],
+    ['padding in the middle', '{"csv_base64":"TQ==TQ=="}'],
+  ])(
+    'POST /api/smoke/echo-bytes rejects %s with 400 INVALID_BODY',
+    async (_name, body) => {
+      const res = await postEchoBytes(body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: {
+          code: 'INVALID_BODY',
+          message: 'csv_base64 must be a base64 string',
+          request_id: res.headers.get('x-request-id'),
+        },
+      });
+    },
+  );
 });
