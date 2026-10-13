@@ -1,0 +1,182 @@
+[
+  {
+    "semester_start": "2018-01-01",
+    "semester_end": "2018-06-30",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2017-15428",
+    "published_on": "2017-12-23",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2018-07-01",
+    "semester_end": "2018-12-31",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2018-9001",
+    "published_on": "2018-06-29",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2019-01-01",
+    "semester_end": "2019-06-30",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2018-17661",
+    "published_on": "2018-12-22",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2019-07-01",
+    "semester_end": "2019-12-31",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2019-9730",
+    "published_on": "2019-06-28",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2020-01-01",
+    "semester_end": "2020-06-30",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2019-18736",
+    "published_on": "2019-12-30",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2020-07-01",
+    "semester_end": "2020-12-31",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2020-6848",
+    "published_on": "2020-06-27",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2021-01-01",
+    "semester_end": "2021-06-30",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2020-17415",
+    "published_on": "2020-12-31",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2021-07-01",
+    "semester_end": "2021-12-31",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2021-10869",
+    "published_on": "2021-06-30",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2022-01-01",
+    "semester_end": "2022-06-30",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2021-21959",
+    "published_on": "2021-12-31",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2022-07-01",
+    "semester_end": "2022-12-31",
+    "rate_bp": 800,
+    "ecb_mro_bp": 0,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2022-10844",
+    "published_on": "2022-06-30",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2023-01-01",
+    "semester_end": "2023-06-30",
+    "rate_bp": 1050,
+    "ecb_mro_bp": 250,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2022-24416",
+    "published_on": "2022-12-30",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2023-07-01",
+    "semester_end": "2023-12-31",
+    "rate_bp": 1200,
+    "ecb_mro_bp": 400,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2023-15221",
+    "published_on": "2023-06-29",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2024-01-01",
+    "semester_end": "2024-06-30",
+    "rate_bp": 1250,
+    "ecb_mro_bp": 450,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2023-26709",
+    "published_on": "2023-12-29",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2024-07-01",
+    "semester_end": "2024-12-31",
+    "rate_bp": 1225,
+    "ecb_mro_bp": 425,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2024-13089",
+    "published_on": "2024-06-28",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2025-01-01",
+    "semester_end": "2025-06-30",
+    "rate_bp": 1115,
+    "ecb_mro_bp": 315,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2024-27618",
+    "published_on": "2024-12-31",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2025-07-01",
+    "semester_end": "2025-12-31",
+    "rate_bp": 1015,
+    "ecb_mro_bp": 215,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2025-13217",
+    "published_on": "2025-06-28",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2026-01-01",
+    "semester_end": "2026-06-30",
+    "rate_bp": 1015,
+    "ecb_mro_bp": 215,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2025-27201",
+    "published_on": "2025-12-31",
+    "status": "VERIFIED"
+  },
+  {
+    "semester_start": "2026-07-01",
+    "semester_end": "2026-12-31",
+    "rate_bp": 1040,
+    "ecb_mro_bp": 240,
+    "spread_bp": 800,
+    "boe_ref": "BOE-A-2026-14327",
+    "published_on": "2026-07-01",
+    "status": "VERIFIED"
+  }
+]

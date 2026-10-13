@@ -9,8 +9,10 @@
   },
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env server/dev.ts",
-    "build": "npm run typecheck && npm run migrate",
+    "build": "npm run typecheck && npm run migrate && npm run rates:seed",
     "migrate": "node --env-file-if-exists=.env scripts/migrate.ts",
+    "rates:seed": "node --env-file-if-exists=.env scripts/rates-seed.ts",
+    "rates:verify": "node scripts/rates-verify.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

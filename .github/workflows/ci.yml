@@ -27,7 +27,9 @@ jobs:
         run: npm run format:check
       - name: Test
         run: npm test
-      # To add with their tasks (plan section 8): rates:verify (T11) and the web build (T28).
+      - name: Verify interest rate table
+        run: npm run rates:verify
+      # To add with its task (plan section 8): the web build (T28).
       # Warning only (plan section 8): a registry hiccup or a new advisory must not block merges.
       - name: Audit production dependencies
         run: npm audit --omit=dev
