@@ -1,3 +1,9 @@
+[build]
+# The build checks the types and applies the database migrations (plan section 9, T07).
+command = "npm run build"
+# Without a publish folder Netlify would publish the repository root.
+publish = "public"
+
 [functions]
 # pdfkit reads its standard-font data at runtime through createRequire and a "#standard-fonts/*" import
 # map. Inlined into the esbuild bundle that breaks ("Cannot find module '#standard-fonts/Helvetica'", so

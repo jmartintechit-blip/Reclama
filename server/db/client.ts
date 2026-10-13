@@ -26,3 +26,20 @@ export function createPool(connectionString: string): Pool {
 
   return pool;
 }
+
+// What the app needs from the database. A pg.Pool satisfies it, and tests pass a fake.
+export interface Db {
+  query(sql: string): Promise<{ rows: unknown[] }>;
+}
+
+// Same rule as scripts/migrate.ts. Without a valid URL the app still starts (liveness must work),
+// and every query fails, which /api/health/ready reports as "not ready". The URL is never logged.
+export function createDbFromEnv(env: NodeJS.ProcessEnv): Db {
+  const url = env.DATABASE_URL;
+  if (url?.startsWith('postgres://') || url?.startsWith('postgresql://')) {
+    return createPool(url); // a Pool connects on the first query, not here
+  }
+  return {
+    query: () => Promise.reject(new Error('DATABASE_URL is not configured')),
+  };
+}

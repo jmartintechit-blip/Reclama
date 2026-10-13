@@ -2,7 +2,7 @@ import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { getRequestId } from './request-id.ts';
 
 // The error shape of the API (plan section 5). `details` will be added with validation errors.
-function sendError(
+export function sendError(
   res: Response,
   status: number,
   code: string,

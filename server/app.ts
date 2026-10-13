@@ -2,10 +2,12 @@ import express from 'express';
 import { errorHandler, notFoundHandler } from './middleware/errors.ts';
 import { requestId } from './middleware/request-id.ts';
 import { securityHeaders } from './middleware/security-headers.ts';
-import { healthRouter } from './routes/health.ts';
+import type { Db } from './db/client.ts';
+import { createHealthRouter } from './routes/health.ts';
 import { smokeRouter } from './routes/smoke.ts';
 
-export function createApp() {
+// `mailer` and `clock` will join `db` here later (plan section 2).
+export function createApp({ db }: { db?: Db } = {}) {
   const app = express();
 
   app.disable('x-powered-by'); // do not advertise the framework and its version
@@ -16,7 +18,7 @@ export function createApp() {
   // The CSV import route will need a bigger limit later (up to 1 MB, plan section 4.8).
   app.use(express.json({ limit: '10kb' }));
 
-  app.use(healthRouter);
+  app.use(createHealthRouter(db));
   app.use(smokeRouter);
 
   // After all the routes: the not-found handler catches what no route matched,

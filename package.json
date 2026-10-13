@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env server/dev.ts",
+    "build": "npm run typecheck && npm run migrate",
     "migrate": "node --env-file-if-exists=.env scripts/migrate.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

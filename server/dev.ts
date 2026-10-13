@@ -1,4 +1,5 @@
 import { createApp } from './app.ts';
+import { createDbFromEnv } from './db/client.ts';
 
 const rawPort = process.env.PORT ?? '3000';
 const port = Number(rawPort);
@@ -10,7 +11,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 
 // Express 5 passes a startup failure (for example, port already in use) to this callback.
-createApp().listen(port, (error) => {
+createApp({ db: createDbFromEnv(process.env) }).listen(port, (error) => {
   if (error) {
     console.error(`Could not listen on port ${String(port)}: ${error.message}`);
     process.exit(1);
