@@ -16,7 +16,6 @@ import {
   createNetlifyHandler,
   type NetlifyContext,
 } from './netlify-adapter.ts';
-import { renderSmokePdf } from './pdf/smoke.ts';
 
 const UUID_V4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -34,6 +33,23 @@ scratchApp.use(requestId);
 scratchApp.use(express.json());
 scratchApp.post('/echo', (req, res) => {
   res.json(req.body);
+});
+// Every byte value 0x00-0xff after a PDF-like prefix: any pass through UTF-8 text would damage it.
+const ALL_BYTES = Buffer.concat([
+  Buffer.from('%PDF-1.7\n', 'latin1'),
+  Buffer.from(Array.from({ length: 256 }, (_unused, byte) => byte)),
+]);
+scratchApp.get('/binary', (_req, res) => {
+  res.type('application/pdf').send(ALL_BYTES);
+});
+// Answers the SHA-256 of the bytes that base64 in the JSON body decodes to.
+scratchApp.post('/sha256', (req, res) => {
+  const { csv_base64: csvBase64 } = req.body as { csv_base64: string };
+  const bytes = Buffer.from(csvBase64, 'base64');
+  res.json({
+    bytes: bytes.length,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+  });
 });
 scratchApp.get('/ip', (req, res) => {
   res.json({ ip: req.ip });
@@ -90,45 +106,6 @@ describe('createNetlifyHandler with the real app', () => {
     );
   });
 
-  it('sends the PDF with the same bytes as renderSmokePdf()', async () => {
-    const res = await call(api, '/api/smoke/pdf');
-    // arrayBuffer(), never text(): text() decodes the body as UTF-8 and would damage the binary bytes.
-    const bytes = Buffer.from(await res.arrayBuffer());
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('application/pdf');
-    expect(res.headers.get('content-disposition')).toBe(
-      'attachment; filename="smoke.pdf"',
-    );
-    expect(bytes.equals(await renderSmokePdf())).toBe(true);
-  });
-
-  // TEMPORARY, with the echo-bytes probe. "Muñoz S.L.;1.234,56;31/12/2025\r\n" in windows-1252 (ñ = 0xf1).
-  it('keeps windows-1252 bytes sent as base64 inside JSON intact', async () => {
-    const csv = Buffer.concat([
-      Buffer.from('Mu', 'latin1'),
-      Buffer.from([0xf1]),
-      Buffer.from('oz S.L.;1.234,56;31/12/2025\r\n', 'latin1'),
-    ]);
-
-    const res = await api(
-      new Request('http://localhost/api/smoke/echo-bytes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csv_base64: csv.toString('base64') }),
-      }),
-      context,
-    );
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      data: {
-        bytes: csv.length,
-        sha256: createHash('sha256').update(csv).digest('hex'),
-      },
-    });
-  });
-
   it('keeps the 404 error shape', async () => {
     const res = await call(api, '/api/does-not-exist');
 
@@ -152,6 +129,42 @@ describe('createNetlifyHandler with a scratch app', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(payload);
+  });
+
+  it('sends a PDF-typed body with byte-identical content', async () => {
+    const res = await call(scratch, '/binary');
+    // arrayBuffer(), never text(): text() decodes the body as UTF-8 and would damage the binary bytes.
+    const bytes = Buffer.from(await res.arrayBuffer());
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/pdf');
+    expect(bytes.equals(ALL_BYTES)).toBe(true);
+    expect(res.headers.get('content-length')).toBe(String(ALL_BYTES.length));
+  });
+
+  // "Muñoz S.L.;1.234,56 €" in windows-1252 (ñ = 0xf1, € = 0x80); in UTF-8 they would be c3 b1 and e2 82 ac.
+  it('keeps windows-1252 bytes sent as base64 inside JSON intact', async () => {
+    const csv = Buffer.concat([
+      Buffer.from('Mu', 'latin1'),
+      Buffer.from([0xf1]),
+      Buffer.from('oz S.L.;1.234,56 ', 'latin1'),
+      Buffer.from([0x80]),
+    ]);
+
+    const res = await scratch(
+      new Request('http://localhost/sha256', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv_base64: csv.toString('base64') }),
+      }),
+      context,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      bytes: csv.length,
+      sha256: createHash('sha256').update(csv).digest('hex'),
+    });
   });
 
   describe('req.ip', () => {

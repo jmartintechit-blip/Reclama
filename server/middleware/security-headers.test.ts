@@ -51,7 +51,6 @@ const cases: {
     path: '/api/health',
     init: jsonPost(JSON.stringify({ padding: 'a'.repeat(20_000) })),
   },
-  { name: '200 PDF', status: 200, path: '/api/smoke/pdf' },
 ];
 
 describe('createApp security headers', () => {
@@ -76,6 +75,33 @@ describe('createApp security headers', () => {
       expect(res.headers.has('etag')).toBe(false);
     },
   );
+});
+
+describe('securityHeaders on a binary answer', () => {
+  let server: Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    // A bare app, like the 500 case below: createApp() has no binary route yet (the PDF letter comes in T23).
+    const app = express();
+    app.use(securityHeaders);
+    app.get('/pdf', (_req, res) => {
+      res.type('application/pdf').send(Buffer.from('%PDF-1.7\n', 'latin1'));
+    });
+    ({ server, baseUrl } = await listen(app));
+  });
+
+  afterAll(async () => {
+    await close(server);
+  });
+
+  it('sends them', async () => {
+    const res = await fetch(`${baseUrl}/pdf`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/pdf');
+    await expectSecurityHeaders(res);
+  });
 });
 
 describe('securityHeaders on a 500 answer', () => {
