@@ -57,8 +57,10 @@ afterAll(async () => {
   await db.close();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   nowMs = START;
+  // Every request here comes from one IP; the limiter itself is tested in auth-rate-limit.test.ts.
+  await db.query('delete from rate_limits');
   for (const { spy } of logSpies) spy.mockImplementation(() => undefined);
 });
 
@@ -592,7 +594,7 @@ describe('validation of the request body', () => {
     expect(short.status).toBe(401); // a short password is just a wrong password
   });
 
-  it('answers 400 VALIDATION_ERROR when the body is not JSON', async () => {
+  it('answers 415 UNSUPPORTED_MEDIA_TYPE when the body is not sent as JSON', async () => {
     const secret = 'plain-text-secret-123';
     for (const type of ['text/plain', 'application/x-www-form-urlencoded']) {
       const res = await fetch(`${baseUrl}/api/auth/register`, {
@@ -602,8 +604,8 @@ describe('validation of the request body', () => {
       });
       const text = await res.text();
 
-      expect(res.status).toBe(400);
-      expect(text).toContain('VALIDATION_ERROR');
+      expect(res.status).toBe(415);
+      expect(text).toContain('UNSUPPORTED_MEDIA_TYPE');
       expect(text).not.toContain(secret);
     }
     expect(logged()).not.toContain(secret);

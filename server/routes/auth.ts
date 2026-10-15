@@ -9,6 +9,7 @@ import {
   type PasswordErrorCode,
 } from '../auth/password.ts';
 import type { Db } from '../db/client.ts';
+import { hashKeyPart } from '../db/rate-limits.ts';
 import { deleteSession } from '../db/sessions.ts';
 import {
   createUserWithProfile,
@@ -72,6 +73,12 @@ export function registerAuthRoutes(
     path: '/api/auth/register',
     auth: 'public',
     schema: { body: registerSchema },
+    rateLimit: {
+      name: 'register',
+      limit: 5,
+      windowSeconds: 60 * 60,
+      key: (_body, ip) => ip,
+    },
     handler: async ({ res, body }) => {
       // The hash is computed before looking at the database, so "email already taken" costs
       // the same time as a success.
@@ -91,6 +98,12 @@ export function registerAuthRoutes(
     path: '/api/auth/login',
     auth: 'public',
     schema: { body: loginSchema },
+    rateLimit: {
+      name: 'login',
+      limit: 5,
+      windowSeconds: 15 * 60,
+      key: (body, ip) => `${ip}:${hashKeyPart(body.email)}`,
+    },
     handler: async ({ res, body }) => {
       const found = await findUserByEmail(db, body.email);
       const storedHash = found?.password_hash ?? null;

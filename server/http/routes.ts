@@ -3,6 +3,7 @@
 // can prove "every route without a cookie answers 401, except the public ones".
 import type { Express, Request, RequestHandler, Response } from 'express';
 import type { z } from 'zod';
+import type { RateLimiter } from '../db/rate-limits.ts';
 import { sendError } from '../middleware/errors.ts';
 import { getSession, type Session } from '../middleware/require-session.ts';
 
@@ -31,6 +32,16 @@ export interface RouteContext<TAuth extends RouteAuth, TBody, TQuery> {
   session: TAuth extends 'session' ? Session : undefined;
 }
 
+// Fixed-window limit per key (plan section 5). `key` receives the VALIDATED body and the
+// caller's IP; build it from the IP and, for personal data such as an email, from a hash
+// (hashKeyPart). `name` prefixes the stored key, so two routes never share a counter by accident.
+export interface RateLimitSpec<TBody> {
+  name: string;
+  limit: number;
+  windowSeconds: number;
+  key: (body: TBody, ip: string) => string;
+}
+
 export interface RouteSpec<
   TAuth extends RouteAuth,
   TBody extends z.ZodType,
@@ -41,6 +52,8 @@ export interface RouteSpec<
   // Secure by default: leaving it out means 'session'. A public route must say so.
   auth?: TAuth;
   schema?: { body?: TBody; query?: TQuery };
+  // Runs after validation (so an email is already normalised) and before the handler.
+  rateLimit?: RateLimitSpec<z.output<TBody>>;
   handler: (
     ctx: RouteContext<TAuth, z.output<TBody>, z.output<TQuery>>,
   ) => void | Promise<void>;
@@ -93,10 +106,12 @@ function sendValidationError(res: Response, details: ValidationDetail[]): void {
 }
 
 // `requireSession` is the session step of the request flow; it runs before validation, so a
-// caller without a session learns nothing about the shape of the request.
+// caller without a session learns nothing about the shape of the request. `rateLimiter` is
+// required, not optional: a route that declares a limit must never run unlimited by omission.
 export function createRouteRegistry(
   app: Express,
   requireSession: RequestHandler,
+  rateLimiter: RateLimiter,
 ): DefineRoute {
   const routes: RegisteredRoute[] = [];
   registries.set(app, routes);
@@ -127,6 +142,26 @@ export function createRouteRegistry(
           return;
         }
         query = checked.data;
+      }
+      if (spec.rateLimit) {
+        const { name, limit, windowSeconds, key } = spec.rateLimit;
+        // No IP (not expected): every such caller shares one key, so the limiter fails closed.
+        const ip = req.ip ?? 'unknown';
+        const result = await rateLimiter({
+          key: `${name}:${key(body as z.output<TBody>, ip)}`,
+          limit,
+          windowSeconds,
+        });
+        if (!result.allowed) {
+          res.set('Retry-After', String(result.retryAfterSeconds));
+          sendError(
+            res,
+            429,
+            'RATE_LIMITED',
+            'Too many requests, try again later',
+          );
+          return;
+        }
       }
       const session = auth === 'session' ? getSession(res) : undefined;
       await spec.handler({ req, res, body, query, session } as RouteContext<

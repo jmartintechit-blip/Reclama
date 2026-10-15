@@ -1,8 +1,17 @@
 import type { Server } from 'node:http';
 import express, { type RequestHandler } from 'express';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { z } from 'zod';
 import { createApp } from '../app.ts';
+import type { RateLimiter } from '../db/rate-limits.ts';
 import { errorHandler, sendError } from '../middleware/errors.ts';
 import { requestId } from '../middleware/request-id.ts';
 import { close, listen } from '../test-utils.ts';
@@ -19,12 +28,14 @@ const fakeSession: RequestHandler = (req, res, next) => {
 };
 
 const handler = vi.fn();
+const allowAll: RateLimiter = () =>
+  Promise.resolve({ allowed: true, retryAfterSeconds: 1 });
 
 function buildApp() {
   const app = express();
   app.use(requestId);
   app.use(express.json());
-  const defineRoute = createRouteRegistry(app, fakeSession);
+  const defineRoute = createRouteRegistry(app, fakeSession, allowAll);
 
   defineRoute({
     method: 'GET',
@@ -206,7 +217,7 @@ describe('defineRoute', () => {
 
   it('keeps a separate registry for every app', () => {
     const other = express();
-    createRouteRegistry(other, fakeSession);
+    createRouteRegistry(other, fakeSession, allowAll);
 
     expect(getRegisteredRoutes(other)).toEqual([]);
     expect(getRegisteredRoutes(createApp())).not.toEqual(
@@ -216,5 +227,105 @@ describe('defineRoute', () => {
 
   it('refuses to list the routes of an app without a registry', () => {
     expect(() => getRegisteredRoutes(express())).toThrow();
+  });
+});
+
+describe('defineRoute with a rateLimit', () => {
+  const limiter = vi.fn<RateLimiter>();
+  const limited = vi.fn();
+  let server: Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    const app = express();
+    app.use(requestId);
+    app.use(express.json());
+    const defineRoute = createRouteRegistry(app, fakeSession, limiter);
+    defineRoute({
+      method: 'POST',
+      path: '/limited',
+      auth: 'public',
+      schema: { body: z.object({ email: z.string().trim().toLowerCase() }) },
+      rateLimit: {
+        name: 'demo',
+        limit: 2,
+        windowSeconds: 60,
+        key: (body, ip) => `${ip}|${body.email}`,
+      },
+      handler: ({ res }) => {
+        limited();
+        res.status(204).end();
+      },
+    });
+    app.use(errorHandler);
+    ({ server, baseUrl } = await listen(app));
+  });
+
+  afterAll(async () => {
+    await close(server);
+  });
+
+  beforeEach(() => {
+    limiter.mockReset();
+    limited.mockClear();
+  });
+
+  const call = (body: unknown) =>
+    fetch(`${baseUrl}/limited`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('asks the limiter with the route name, the validated body and the IP, then runs the handler', async () => {
+    limiter.mockResolvedValue({ allowed: true, retryAfterSeconds: 7 });
+
+    const res = await call({ email: '  Ana@Example.COM ' });
+
+    expect(res.status).toBe(204);
+    expect(limited).toHaveBeenCalledTimes(1);
+    expect(limiter).toHaveBeenCalledWith({
+      key: expect.stringMatching(/^demo:.+\|ana@example\.com$/) as string,
+      limit: 2,
+      windowSeconds: 60,
+    });
+  });
+
+  it('answers 429 RATE_LIMITED with an integer Retry-After and never runs the handler', async () => {
+    limiter.mockResolvedValue({ allowed: false, retryAfterSeconds: 42 });
+
+    const res = await call({ email: 'a@example.com' });
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('retry-after')).toBe('42');
+    expect(await res.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many requests, try again later',
+        request_id: res.headers.get('x-request-id'),
+      },
+    });
+    expect(limited).not.toHaveBeenCalled();
+  });
+
+  it('validates first: an invalid body is a 400 that does not touch the limiter', async () => {
+    const res = await call({ email: 5 });
+
+    expect(res.status).toBe(400);
+    expect(limiter).not.toHaveBeenCalled();
+    expect(limited).not.toHaveBeenCalled();
+  });
+
+  it('fails closed: a limiter error is a 500 and the handler never runs', async () => {
+    limiter.mockRejectedValue(new Error('database down'));
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const res = await call({ email: 'a@example.com' });
+
+    expect(res.status).toBe(500);
+    expect(limited).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 });

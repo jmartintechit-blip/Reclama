@@ -1,10 +1,12 @@
 import express from 'express';
 import { systemClock } from './clock.ts';
 import { errorHandler, notFoundHandler } from './middleware/errors.ts';
+import { originGuard } from './middleware/origin-guard.ts';
 import { requestId } from './middleware/request-id.ts';
 import { createRequireSession } from './middleware/require-session.ts';
 import { securityHeaders } from './middleware/security-headers.ts';
 import type { Db } from './db/client.ts';
+import { hitRateLimit } from './db/rate-limits.ts';
 import type { Clock } from './domain/dates.ts';
 import { createRouteRegistry } from './http/routes.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
@@ -27,17 +29,19 @@ export function createApp({
   app.set('etag', false); // every answer is "no-store", so a weak ETag would only add bytes
   app.use(securityHeaders); // first, so that errors and 404s get the headers too
   app.use(requestId);
-  // T16 plugs the rate limiter and the origin guard in here, before the body is read.
+  app.use(originGuard); // before the body is read: a foreign origin or a non-JSON body never reaches the parser
   // Small on purpose: normal JSON bodies in this API are a few fields.
   // The CSV import route will need a bigger limit later (up to 1 MB, plan section 4.8).
   app.use(express.json({ limit: '10kb' }));
 
-  // Request flow (plan section 1): request id -> [rate limit] -> [origin guard] -> session ->
-  // validation -> handler. The last three are applied by defineRoute to each route, in that order.
+  // Request flow: request id -> origin guard -> body parser -> session -> validation -> rate
+  // limit -> handler. The last four are applied by defineRoute to each route, in that order. The
+  // rate limit comes after validation so that its key can use the normalised email.
   const sessionDb = db ?? noDb;
   const defineRoute = createRouteRegistry(
     app,
     createRequireSession(sessionDb, clock),
+    (rule) => hitRateLimit(sessionDb, clock, rule),
   );
   registerHealthRoutes(defineRoute, db);
   registerAuthRoutes(defineRoute, { db: sessionDb, clock });
