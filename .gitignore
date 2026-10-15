@@ -10,3 +10,15 @@ coverage/
 
 # Private notes and a backup of the assistant memory (personal data, test accounts): never committed
 docs/private/
+
+# Assistant instructions, plans and working notes: they stay on the author's disk, never in the repository
+CLAUDE.md
+.claude/
+AGENTS.md
+GEMINI.md
+.cursorrules
+docs/PLAN.md
+docs/DECISIONS-LOG.md
+docs/DEFEND.md
+docs/HANDOFF.md
+docs/CHECKPOINTS.md
