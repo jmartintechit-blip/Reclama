@@ -131,7 +131,16 @@ describe('register, me, logout', () => {
     const me = await getMe(cookie);
     expect(me.status).toBe(200);
     expect(await me.json()).toEqual({
-      data: { user: { id: data.user.id, email, is_demo: false } },
+      data: {
+        user: { id: data.user.id, email, is_demo: false },
+        profile: {
+          business_name: null,
+          tax_id: null,
+          address: null,
+          iban: null,
+          default_compensation: 'PER_CLAIM',
+        },
+      },
     });
 
     const out = await post('/api/auth/logout', undefined, cookie);

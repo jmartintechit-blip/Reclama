@@ -32,14 +32,15 @@ export interface RouteContext<TAuth extends RouteAuth, TBody, TQuery> {
   session: TAuth extends 'session' ? Session : undefined;
 }
 
-// Fixed-window limit per key (plan section 5). `key` receives the VALIDATED body and the
-// caller's IP; build it from the IP and, for personal data such as an email, from a hash
-// (hashKeyPart). `name` prefixes the stored key, so two routes never share a counter by accident.
-export interface RateLimitSpec<TBody> {
+// Fixed-window limit per key (plan section 5). `key` receives the VALIDATED body, the
+// caller's IP and, on routes with auth 'session', the session; build it from the IP or the user
+// id and, for personal data such as an email, from a hash (hashKeyPart). `name` prefixes the
+// stored key, so two routes never share a counter by accident.
+export interface RateLimitSpec<TBody, TSession = undefined> {
   name: string;
   limit: number;
   windowSeconds: number;
-  key: (body: TBody, ip: string) => string;
+  key: (body: TBody, ip: string, session: TSession) => string;
 }
 
 export interface RouteSpec<
@@ -53,7 +54,10 @@ export interface RouteSpec<
   auth?: TAuth;
   schema?: { body?: TBody; query?: TQuery };
   // Runs after validation (so an email is already normalised) and before the handler.
-  rateLimit?: RateLimitSpec<z.output<TBody>>;
+  rateLimit?: RateLimitSpec<
+    z.output<TBody>,
+    TAuth extends 'session' ? Session : undefined
+  >;
   handler: (
     ctx: RouteContext<TAuth, z.output<TBody>, z.output<TQuery>>,
   ) => void | Promise<void>;
@@ -143,12 +147,17 @@ export function createRouteRegistry(
         }
         query = checked.data;
       }
+      const session = auth === 'session' ? getSession(res) : undefined;
       if (spec.rateLimit) {
         const { name, limit, windowSeconds, key } = spec.rateLimit;
         // No IP (not expected): every such caller shares one key, so the limiter fails closed.
         const ip = req.ip ?? 'unknown';
         const result = await rateLimiter({
-          key: `${name}:${key(body as z.output<TBody>, ip)}`,
+          key: `${name}:${key(
+            body as z.output<TBody>,
+            ip,
+            session as TAuth extends 'session' ? Session : undefined,
+          )}`,
           limit,
           windowSeconds,
         });
@@ -163,7 +172,6 @@ export function createRouteRegistry(
           return;
         }
       }
-      const session = auth === 'session' ? getSession(res) : undefined;
       await spec.handler({ req, res, body, query, session } as RouteContext<
         TAuth,
         z.output<TBody>,

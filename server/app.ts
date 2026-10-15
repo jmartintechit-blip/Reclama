@@ -45,7 +45,7 @@ export function createApp({
   );
   registerHealthRoutes(defineRoute, db);
   registerAuthRoutes(defineRoute, { db: sessionDb, clock });
-  registerMeRoutes(defineRoute);
+  registerMeRoutes(defineRoute, { db: sessionDb });
 
   // After all the routes: the not-found handler catches what no route matched,
   // and the error handler must be the last middleware to receive every error.

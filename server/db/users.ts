@@ -58,6 +58,29 @@ export async function findUserByEmail(
   return (rows[0] as LoginUser | undefined) ?? null;
 }
 
+// null for a user without a password (a demo user) or without a row.
+export async function getPasswordHash(
+  db: Db,
+  userId: string,
+): Promise<string | null> {
+  const { rows } = await db.query(
+    'select password_hash from users where id = $1',
+    [userId],
+  );
+  const row = rows[0] as { password_hash: string | null } | undefined;
+  return row?.password_hash ?? null;
+}
+
+// Right to erasure: deleting the users row removes every row of that user in every table
+// (each one has user_id -> users ON DELETE CASCADE). Returns false when there was no such user.
+export async function deleteUser(db: Db, userId: string): Promise<boolean> {
+  const { rows } = await db.query(
+    'delete from users where id = $1 returning id',
+    [userId],
+  );
+  return rows.length > 0;
+}
+
 // Compare-and-set on the old hash: if the password changed in the meantime, this does nothing.
 export async function replacePasswordHash(
   db: Db,
