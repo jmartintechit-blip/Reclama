@@ -7,3 +7,6 @@ coverage/
 .env.*
 !.env.example
 .claude/settings.local.json
+
+# Private notes and a backup of the assistant memory (personal data, test accounts): never committed
+docs/private/
