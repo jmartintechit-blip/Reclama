@@ -1,5 +1,9 @@
+import { debtorMatchKey, normalizeTaxId } from '../domain/debtor.ts';
 import type { Db } from './client.ts';
 import { buildSet, normalizePage, type Page } from './query-helpers.ts';
+
+// The pure function lives in the domain (the CSV parser needs it); callers keep importing it here.
+export { debtorMatchKey };
 
 // Every function takes `userId` first and puts `user_id` in its SQL: an id alone is never
 // trusted. A debtor of another user behaves exactly like one that does not exist.
@@ -20,25 +24,6 @@ export interface DebtorPatch {
 }
 
 const COLUMNS = 'id, name, tax_id, email, kind';
-
-// Tax ids are compared without spaces or dashes and in upper case: "b-12 345 678" is B12345678.
-function normalizeTaxId(taxId: string): string {
-  return taxId.toUpperCase().replace(/[\s-]/g, '');
-}
-
-// How the same debtor is recognised again (for example in a CSV import). The name is compared
-// without accents (NFD, then marks removed), in lower case, with runs of spaces collapsed and
-// trimmed. When a tax id is given it is part of the identity: the same name with another tax id
-// is another debtor. A JSON array keeps the two parts apart whatever characters they hold.
-export function debtorMatchKey(name: string, taxId?: string | null): string {
-  const normalizedName = name
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-  return JSON.stringify([normalizeTaxId(taxId ?? ''), normalizedName]);
-}
 
 // ONE statement: insert, or return the row that already has this match_key. The no-op update
 // exists only so that `returning` also gives the existing row; the unique constraint decides
