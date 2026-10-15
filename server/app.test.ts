@@ -120,6 +120,7 @@ describe('the route registry of createApp', () => {
       { method: 'GET', path: '/api/me', auth: 'session' },
       { method: 'PATCH', path: '/api/me/profile', auth: 'session' },
       { method: 'DELETE', path: '/api/me', auth: 'session' },
+      { method: 'POST', path: '/api/imports', auth: 'session' },
     ]);
   });
 
@@ -127,8 +128,8 @@ describe('the route registry of createApp', () => {
     const first = createApp();
     const second = createApp();
 
-    expect(getRegisteredRoutes(first)).toHaveLength(8);
-    expect(getRegisteredRoutes(second)).toHaveLength(8);
+    expect(getRegisteredRoutes(first)).toHaveLength(9);
+    expect(getRegisteredRoutes(second)).toHaveLength(9);
   });
 });
 

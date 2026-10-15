@@ -11,6 +11,11 @@ import type { Clock } from './domain/dates.ts';
 import { createRouteRegistry } from './http/routes.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerHealthRoutes } from './routes/health.ts';
+import {
+  IMPORT_BODY_LIMIT_BYTES,
+  IMPORTS_PATH,
+  registerImportRoutes,
+} from './routes/imports.ts';
 import { registerMeRoutes } from './routes/me.ts';
 
 // Without a database the app still starts (liveness must work); every query then fails.
@@ -30,22 +35,31 @@ export function createApp({
   app.use(securityHeaders); // first, so that errors and 404s get the headers too
   app.use(requestId);
   app.use(originGuard); // before the body is read: a foreign origin or a non-JSON body never reaches the parser
+  const sessionDb = db ?? noDb;
+  const requireSession = createRequireSession(sessionDb, clock);
+  // The CSV import carries a file of up to 1 MB as base64, so its path gets its own, bigger JSON
+  // parser. It comes BEFORE the global one (the body is read once, and the global parser skips a
+  // request whose body is already consumed) and AFTER the session check, so an anonymous caller
+  // can never make the server buffer and parse 1.4 MB: it gets a 401 first.
+  app.post(
+    IMPORTS_PATH,
+    requireSession,
+    express.json({ limit: IMPORT_BODY_LIMIT_BYTES }),
+  );
   // Small on purpose: normal JSON bodies in this API are a few fields.
-  // The CSV import route will need a bigger limit later (up to 1 MB, plan section 4.8).
   app.use(express.json({ limit: '10kb' }));
 
-  // Request flow: request id -> origin guard -> body parser -> session -> validation -> rate
-  // limit -> handler. The last four are applied by defineRoute to each route, in that order. The
-  // rate limit comes after validation so that its key can use the normalised email.
-  const sessionDb = db ?? noDb;
-  const defineRoute = createRouteRegistry(
-    app,
-    createRequireSession(sessionDb, clock),
-    (rule) => hitRateLimit(sessionDb, clock, rule),
+  // Request flow: request id -> origin guard -> [session, bigger parser for the import path only]
+  // -> body parser -> session -> validation -> rate limit -> handler. The last four are applied by
+  // defineRoute to each route, in that order. The rate limit comes after validation so that its
+  // key can use the normalised email.
+  const defineRoute = createRouteRegistry(app, requireSession, (rule) =>
+    hitRateLimit(sessionDb, clock, rule),
   );
   registerHealthRoutes(defineRoute, db);
   registerAuthRoutes(defineRoute, { db: sessionDb, clock });
   registerMeRoutes(defineRoute, { db: sessionDb });
+  registerImportRoutes(defineRoute, { db: sessionDb });
 
   // After all the routes: the not-found handler catches what no route matched,
   // and the error handler must be the last middleware to receive every error.

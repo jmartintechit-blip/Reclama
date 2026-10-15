@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import express from 'express';
+import express, { type RequestHandler } from 'express';
 import {
   afterEach,
   beforeEach,
@@ -13,6 +13,7 @@ import { createApp } from './app.ts';
 import { createTestDb } from './db/test-db.ts';
 import { errorHandler } from './middleware/errors.ts';
 import { requestId } from './middleware/request-id.ts';
+import { IMPORT_BODY_LIMIT_BYTES } from './routes/imports.ts';
 import {
   createNetlifyHandler,
   type NetlifyContext,
@@ -27,10 +28,26 @@ const context: NetlifyContext = { requestId: 'test-netlify-request-id' };
 // The real app, wrapped as the Function wraps it (netlify/functions/api.ts).
 const api = createNetlifyHandler(createApp());
 
+// Answers the SHA-256 of the bytes that base64 in the JSON body decodes to.
+const answerSha256: RequestHandler = (req, res) => {
+  const { csv_base64: csvBase64 } = req.body as { csv_base64: string };
+  const bytes = Buffer.from(csvBase64, 'base64');
+  res.json({
+    bytes: bytes.length,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+  });
+};
+
 // Routes that the real app does not have (a POST, req.ip, cookies, a crash) live in a tiny app of our own,
 // wrapped by the same createNetlifyHandler. createApp() gets no test-only routes.
 const scratchApp = express();
 scratchApp.use(requestId);
+// Like createApp: the bigger parser of one path comes before the general one.
+scratchApp.post(
+  '/sha256-large',
+  express.json({ limit: IMPORT_BODY_LIMIT_BYTES }),
+  answerSha256,
+);
 scratchApp.use(express.json());
 scratchApp.post('/echo', (req, res) => {
   res.json(req.body);
@@ -43,15 +60,7 @@ const ALL_BYTES = Buffer.concat([
 scratchApp.get('/binary', (_req, res) => {
   res.type('application/pdf').send(ALL_BYTES);
 });
-// Answers the SHA-256 of the bytes that base64 in the JSON body decodes to.
-scratchApp.post('/sha256', (req, res) => {
-  const { csv_base64: csvBase64 } = req.body as { csv_base64: string };
-  const bytes = Buffer.from(csvBase64, 'base64');
-  res.json({
-    bytes: bytes.length,
-    sha256: createHash('sha256').update(bytes).digest('hex'),
-  });
-});
+scratchApp.post('/sha256', answerSha256);
 scratchApp.get('/ip', (req, res) => {
   res.json({ ip: req.ip });
 });
@@ -202,6 +211,36 @@ describe('createNetlifyHandler with a scratch app', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ csv_base64: csv.toString('base64') }),
+      }),
+      context,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      bytes: csv.length,
+      sha256: createHash('sha256').update(csv).digest('hex'),
+    });
+  });
+
+  // The adapter has to deliver a CSV of almost 1 MB, sent as 1.2 MB of base64 in JSON, byte for byte.
+  it('keeps a 1.2 MB base64 JSON body of windows-1252 bytes intact', async () => {
+    const csv = Buffer.alloc(
+      900_000,
+      Buffer.concat([
+        Buffer.from('Mu', 'latin1'),
+        Buffer.from([0xf1]),
+        Buffer.from('oz S.L.;1.234,56 ', 'latin1'),
+        Buffer.from([0x80, 0x0a]),
+      ]),
+    );
+    const body = JSON.stringify({ csv_base64: csv.toString('base64') });
+    expect(body.length).toBeGreaterThan(1_200_000);
+
+    const res = await scratch(
+      new Request('http://localhost/sha256-large', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
       }),
       context,
     );
