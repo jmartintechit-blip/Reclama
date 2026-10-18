@@ -24,8 +24,10 @@ import {
 } from '../db/invoices.ts';
 import {
   addPayment,
+  countPayments,
   listPayments,
   listPaymentsForInvoices,
+  MAX_PAYMENTS_PER_INVOICE,
   type Payment,
 } from '../db/payments.ts';
 import { listVerifiedRates } from '../db/rates.ts';
@@ -428,6 +430,22 @@ export function registerInvoiceRoutes(
           422,
           'PAYMENT_BEFORE_ISSUE',
           'The payment date is before the issue date',
+        );
+        return;
+      }
+      // Counted before anything is written, like the invoice cap. Requests that run at the same
+      // instant can pass the count together and overshoot by a few; the write rate limit keeps
+      // that small.
+      if (
+        (await countPayments(db, userId, invoice.id)) >=
+        MAX_PAYMENTS_PER_INVOICE
+      ) {
+        sendError(
+          res,
+          422,
+          'PAYMENT_LIMIT_REACHED',
+          'The limit of payments per invoice has been reached',
+          { limit: MAX_PAYMENTS_PER_INVOICE },
         );
         return;
       }

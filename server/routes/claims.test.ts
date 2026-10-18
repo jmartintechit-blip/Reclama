@@ -1,5 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { MAX_CLAIMS_PER_USER } from '../db/claims.ts';
+import {
+  MAX_CLAIMS_PER_USER,
+  MAX_EVENTS_PER_CLAIM,
+  MAX_INVOICES_PER_CLAIM,
+} from '../db/claims.ts';
 import { hashKeyPart } from '../db/rate-limits.ts';
 import {
   errorOf,
@@ -642,6 +647,112 @@ describe('POST /api/claims', () => {
     expect(await count('claims', user)).toBe(0);
   });
 
+  describe('the size of a claim', () => {
+    // A BUSINESS debtor with `n` overdue invoices, written straight to the database (the write
+    // rate limit would stop the API long before 100). Returns the ids in number order.
+    async function debtorWithInvoices(n: number) {
+      const user = await t.makeUser();
+      const first = await create(user, { number: 'F-0' });
+      await setKind(user, first.debtor_id, 'BUSINESS');
+      await t.db.query(
+        `insert into invoices (user_id, debtor_id, number, issue_date, due_date, amount_cents)
+         select $1::uuid, $2::uuid, 'G-' || lpad(g::text, 4, '0'), '2026-08-31', '2026-09-30', 100000
+           from generate_series(1, $3::int) g`,
+        [user.id, first.debtor_id, n - 1],
+      );
+      const { rows } = await t.db.query(
+        'select id from invoices where user_id = $1 order by number',
+        [user.id],
+      );
+      return {
+        user,
+        debtorId: first.debtor_id,
+        ids: (rows as { id: string }[]).map((row) => row.id),
+      };
+    }
+
+    it('claims exactly the limit of invoices, by default and by id', async () => {
+      const byDefault = await debtorWithInvoices(MAX_INVOICES_PER_CLAIM);
+      const byId = await debtorWithInvoices(MAX_INVOICES_PER_CLAIM);
+
+      const a = await claimOK(byDefault.user, {
+        debtor_id: byDefault.debtorId,
+      });
+      const b = await claimOK(byId.user, {
+        debtor_id: byId.debtorId,
+        invoice_ids: byId.ids,
+      });
+
+      expect(a.lines).toHaveLength(MAX_INVOICES_PER_CLAIM);
+      expect(b.lines).toHaveLength(MAX_INVOICES_PER_CLAIM);
+      expect(a.principal_cents).toBe(MAX_INVOICES_PER_CLAIM * 100_000);
+    });
+
+    it('refuses one invoice more than the limit with CLAIM_TOO_LARGE, by default and by id, creating nothing', async () => {
+      const { user, debtorId, ids } = await debtorWithInvoices(
+        MAX_INVOICES_PER_CLAIM + 1,
+      );
+
+      const byDefault = await claim(user, { debtor_id: debtorId });
+      const byId = await claim(user, { debtor_id: debtorId, invoice_ids: ids });
+
+      for (const res of [byDefault, byId]) {
+        expect(res.status, res.text).toBe(422);
+        expect(errorOf(res)).toMatchObject({
+          code: 'CLAIM_TOO_LARGE',
+          details: { limit: MAX_INVOICES_PER_CLAIM },
+        });
+      }
+      expect(await count('claims', user)).toBe(0);
+      expect(await count('claim_invoices', user)).toBe(0);
+    });
+
+    it('refuses a list over the limit before looking any invoice up', async () => {
+      const user = await t.makeUser();
+      const { debtorId } = await setup(user);
+      // 101 ids that do not exist: with the size checked first the answer is not a 404.
+      const ids = Array.from({ length: MAX_INVOICES_PER_CLAIM + 1 }, () =>
+        randomUUID(),
+      );
+
+      const res = await claim(user, { debtor_id: debtorId, invoice_ids: ids });
+
+      expect(res.status, res.text).toBe(422);
+      expect(errorOf(res).code).toBe('CLAIM_TOO_LARGE');
+    });
+
+    it('lets the user claim the rest in a second claim', async () => {
+      const { user, debtorId, ids } = await debtorWithInvoices(
+        MAX_INVOICES_PER_CLAIM + 5,
+      );
+
+      const first = await claimOK(user, {
+        debtor_id: debtorId,
+        invoice_ids: ids.slice(0, MAX_INVOICES_PER_CLAIM),
+      });
+      const second = await claimOK(user, { debtor_id: debtorId }); // the 5 left
+
+      expect(first.lines).toHaveLength(MAX_INVOICES_PER_CLAIM);
+      expect(second.lines).toHaveLength(5);
+    });
+
+    it('does not count what cannot be claimed against the limit of the default selection', async () => {
+      const { user, debtorId, ids } = await debtorWithInvoices(
+        MAX_INVOICES_PER_CLAIM + 3,
+      );
+      // 3 of them are paid: 100 are left, which is exactly the limit.
+      await t.db.query(
+        `update invoices set status = 'PAID' where user_id = $1 and id = any($2::uuid[])`,
+        [user.id, ids.slice(0, 3)],
+      );
+
+      const res = await claim(user, { debtor_id: debtorId });
+
+      expect(res.status, res.text).toBe(201);
+      expect(claimOf(res).lines).toHaveLength(MAX_INVOICES_PER_CLAIM);
+    });
+  });
+
   it('refuses the claim after the limit with CLAIM_LIMIT_REACHED, creating nothing', async () => {
     const user = await t.makeUser();
     const { debtorId, a, b } = await setup(user);
@@ -1103,6 +1214,35 @@ describe('POST /api/claims/:id/events', () => {
       await t.call(user, 'GET', `/api/claims/${created.id}`),
     );
     expect(shown.events).toEqual([eventOf(res)]);
+  });
+
+  it('refuses the event after the limit with EVENT_LIMIT_REACHED, creating nothing, and only for that claim', async () => {
+    const { user, created, post } = await newClaim();
+    const other = await newClaim();
+    // Everything but one place is taken (written straight to the database).
+    await t.db.query(
+      `insert into claim_events (user_id, claim_id, kind, occurred_on)
+       select $1::uuid, $2::uuid, 'NOTE', '2026-10-30' from generate_series(1, $3::int)`,
+      [user.id, created.id, MAX_EVENTS_PER_CLAIM - 1],
+    );
+    const event = { kind: 'NOTE', occurred_on: '2026-10-30' };
+
+    const last = await post(event);
+    const over = await post(event);
+
+    expect(last.status, last.text).toBe(201);
+    expect(over.status, over.text).toBe(422);
+    expect(errorOf(over)).toMatchObject({
+      code: 'EVENT_LIMIT_REACHED',
+      details: { limit: MAX_EVENTS_PER_CLAIM },
+    });
+    const { rows } = await t.db.query(
+      'select count(*)::int as n from claim_events where claim_id = $1',
+      [created.id],
+    );
+    expect(rows).toEqual([{ n: MAX_EVENTS_PER_CLAIM }]);
+    // Another claim of another user is not affected.
+    expect((await other.post(event)).status).toBe(201);
   });
 
   it('keeps the note optional: it is stored as null', async () => {

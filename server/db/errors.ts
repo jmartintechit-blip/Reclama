@@ -81,6 +81,9 @@ export const INVOICE_NUMBER_UNIQUE = 'invoices_user_id_debtor_id_number_key';
 export const CLAIM_INVOICE_FK = 'claim_invoices_user_id_invoice_id_fkey';
 export const CLAIM_DEBTOR_FK = 'claims_user_id_debtor_id_fkey';
 
+// Created by migration 0004: an invoice can be in at most one claim of its user.
+export const CLAIM_INVOICE_UNIQUE = 'claim_invoices_one_claim_per_invoice';
+
 // Names given by the triggers of the payment guard migration to the check violations they raise.
 export const PAYMENT_TOTAL_CHECK = 'payments_total_within_invoice';
 export const INVOICE_AMOUNT_CHECK = 'invoices_amount_covers_payments';

@@ -364,6 +364,45 @@ describe('ipKeyPart', () => {
     expect(ipKeyPart('::FFFF:1.2.3.4')).toBe('1.2.3.4');
   });
 
+  it.each([
+    '::ffff:0102:0304',
+    '::ffff:102:304',
+    '::FFFF:0102:0304',
+    '0:0:0:0:0:ffff:1.2.3.4',
+    '0000:0000:0000:0000:0000:ffff:0102:0304',
+    '0:0:0:0:0:ffff:0102:0304',
+    '::ffff:1.2.3.4%eth0',
+    '::ffff:0102:0304%2',
+    '[::ffff:1.2.3.4]',
+    '[::ffff:1.2.3.4]:8080',
+    '[::ffff:102:304]:443',
+  ])(
+    'gives the key of the plain IPv4 address to the mapped form %s',
+    (form) => {
+      expect(ipKeyPart(form)).toBe(ipKeyPart('1.2.3.4'));
+      expect(ipKeyPart(form)).toBe('1.2.3.4');
+    },
+  );
+
+  it('does not take a different address for a mapped one', () => {
+    expect(ipKeyPart('::ffff:0102:0305')).toBe('1.2.3.5'); // control: the last group counts
+    expect(ipKeyPart('::fffe:0102:0304')).toBe('0000:0000:0000:0000::/64');
+    expect(ipKeyPart('1::ffff:0102:0304')).toBe('0001:0000:0000:0000::/64');
+    expect(ipKeyPart('0:0:0:0:1:ffff:0102:0304')).toBe(
+      '0000:0000:0000:0000::/64',
+    );
+  });
+
+  it('removes a trailing port from an IPv4 address and from a bracketed IPv6 address', () => {
+    expect(ipKeyPart('1.2.3.4:5678')).toBe('1.2.3.4');
+    expect(ipKeyPart('203.0.113.250:1')).toBe(ipKeyPart('203.0.113.250'));
+    expect(ipKeyPart('[2001:db8:1:2::1]:443')).toBe(
+      ipKeyPart('2001:db8:1:2::1'),
+    );
+    expect(ipKeyPart('[2001:db8:1:2::1]')).toBe('2001:0db8:0001:0002::/64');
+    expect(ipKeyPart('[fe80::1%eth0]:80')).toBe(ipKeyPart('fe80::2'));
+  });
+
   it('handles an IPv4 tail in other IPv6 addresses', () => {
     expect(ipKeyPart('64:ff9b::1.2.3.4')).toBe('0064:ff9b:0000:0000::/64');
   });

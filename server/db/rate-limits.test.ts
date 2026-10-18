@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Clock } from '../domain/dates.ts';
 import type { Db } from './client.ts';
-import { hashKeyPart, hitRateLimit } from './rate-limits.ts';
+import { hashKeyPart, hitRateLimit, refundRateLimit } from './rate-limits.ts';
 import { createTestDb, type TestDb } from './test-db.ts';
 
 const START = Date.parse('2026-10-14T10:00:00Z'); // exactly at the start of a 15 minute window
@@ -136,6 +136,72 @@ describe('hitRateLimit', () => {
     await expect(hit('k', 3, 900, broken)).rejects.toThrow(
       'connection refused',
     );
+  });
+});
+
+describe('refundRateLimit', () => {
+  const refund = (key: string, windowSeconds = 15 * 60) =>
+    refundRateLimit(db, clock, { key, limit: 3, windowSeconds });
+  const hitsOf = async (key: string) =>
+    (
+      await db.query('select hits from rate_limits where key = $1', [key])
+    ).rows.map((row) => row.hits);
+
+  it('gives back one hit, so the freed place can be used again', async () => {
+    for (let i = 0; i < 3; i += 1) await hit('k');
+    expect(await hitsOf('k')).toEqual([3]);
+
+    await refund('k');
+
+    expect(await hitsOf('k')).toEqual([2]);
+    expect((await hit('k')).allowed).toBe(true);
+    expect((await hit('k')).allowed).toBe(false); // control: the limit itself is unchanged
+  });
+
+  it('never goes below zero: the last hit removes the row and a missing row stays missing', async () => {
+    await hit('k');
+
+    await refund('k');
+    expect(await hitsOf('k')).toEqual([]);
+
+    await refund('k'); // nothing to give back
+    await refund('never-hit');
+    expect(await hitsOf('k')).toEqual([]);
+    expect((await hit('k')).allowed).toBe(true);
+    expect(await hitsOf('k')).toEqual([1]);
+  });
+
+  it('uses the same window as hitRateLimit and leaves the other windows and keys alone', async () => {
+    await hit('k');
+    await hit('other');
+    nowMs = START + 15 * MINUTE;
+    await hit('k');
+    await hit('k');
+
+    await refund('k'); // the current window only
+
+    const { rows } = await db.query(
+      'select key, hits from rate_limits order by key, window_start',
+    );
+    expect(rows).toEqual([
+      { key: 'k', hits: 1 },
+      { key: 'k', hits: 1 },
+      { key: 'other', hits: 1 },
+    ]);
+  });
+
+  it('fails loudly on a database error', async () => {
+    const broken: Db = {
+      query: () => Promise.reject(new Error('connection refused')),
+    };
+
+    await expect(
+      refundRateLimit(broken, clock, {
+        key: 'k',
+        limit: 3,
+        windowSeconds: 900,
+      }),
+    ).rejects.toThrow('connection refused');
   });
 });
 

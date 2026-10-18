@@ -9,6 +9,9 @@ import {
   summarizePdf,
 } from '../pdf-test-utils.ts';
 import {
+  LetterDataError,
+  MAX_LETTER_PAGES,
+  MAX_LETTER_SEGMENTS,
   PAYMENT_DEADLINE_DAYS,
   renderLetter,
   type LetterData,
@@ -260,6 +263,81 @@ describe('renderLetter', () => {
       expect(pages[totalsPage]).toContain('Fundamento legal');
       expect(pages[totalsPage]).toContain('Atentamente,');
     });
+  });
+});
+
+describe('the limits of a letter', () => {
+  // The same segment repeated: only the count matters here.
+  const withSegments = (invoices: number, segments: number): LetterData =>
+    letter({
+      invoices: Array.from({ length: invoices }, (_, i) =>
+        invoice(i + 1, {
+          segments: Array.from({ length: segments }, () =>
+            segment('2026-06-04', '2026-06-30', 27, 1015, 751),
+          ),
+        }),
+      ),
+    });
+
+  it('renders a claim of 100 invoices at the most that fits in 40 pages, in reasonable time', async () => {
+    const started = performance.now();
+    const pdf = await renderLetter(withSegments(100, 10));
+    const elapsed = performance.now() - started;
+
+    const { pageCount } = summarizePdf(pdf);
+    expect(pageCount).toBeGreaterThan(30);
+    expect(pageCount).toBeLessThanOrEqual(MAX_LETTER_PAGES);
+    expect(extractPdfText(pdf)).toContain('F-2026-100');
+    expect(elapsed).toBeLessThan(10_000);
+  });
+
+  it('refuses 100 invoices with 18 segments each (1,800 segments), at once and without drawing', async () => {
+    const started = performance.now();
+
+    await expect(renderLetter(withSegments(100, 18))).rejects.toBeInstanceOf(
+      LetterDataError,
+    );
+
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  it('refuses more than 1,500 interest segments in total, and not before', async () => {
+    await expect(
+      renderLetter(withSegments(1, MAX_LETTER_SEGMENTS + 1)),
+    ).rejects.toThrow('too many interest segments');
+    // Control: exactly the limit is not refused for its segment count (here the pages stop it).
+    await expect(
+      renderLetter(withSegments(1, MAX_LETTER_SEGMENTS)),
+    ).rejects.toThrow('too many pages');
+  });
+
+  it('refuses a letter that would have more than 40 pages, and accepts one of 40 or fewer', async () => {
+    await expect(renderLetter(withSegments(100, 11))).rejects.toBeInstanceOf(
+      LetterDataError,
+    );
+    const pdf = await renderLetter(withSegments(1, 1370)); // 40 pages
+    expect(summarizePdf(pdf).pageCount).toBe(MAX_LETTER_PAGES);
+  });
+
+  it('prints at most 6 lines of the sender address and keeps the date and the reference on page 1', async () => {
+    const address = Array.from(
+      { length: 30 },
+      (_, i) => `Linea ${String(i + 1)}`,
+    )
+      .join('\n')
+      .repeat(1);
+    const pdf = await renderLetter(
+      letter({ sender: { ...letter().sender, address } }),
+    );
+
+    const first = extractPdfPageLines(pdf, 1);
+    expect(first).toContain('Linea 6');
+    expect(first).not.toContain('Linea 7');
+    expect(extractPdfText(pdf)).not.toContain('Linea 7');
+    expect(first).toContain('FECHA');
+    expect(first).toContain('REFERENCIA');
+    expect(first).toContain('REQ-3F2A9C10');
+    expect(first).toContain('REQUERIMIENTO DE PAGO');
   });
 });
 

@@ -91,7 +91,7 @@ async function setup(
   });
   expect(claim.status, claim.text).toBe(201);
   const { id } = (claim.json as { data: { claim: { id: string } } }).data.claim;
-  return { user, claimId: id };
+  return { user, claimId: id, debtorId };
 }
 
 // `key: null` sends no Idempotency-Key header at all.
@@ -129,6 +129,14 @@ const emailLogCount = (t: TestApp, userId: string) =>
   countWhere(t, 'select count(*)::int as n from email_log where user_id = $1', [
     userId,
   ]);
+
+const userLimitKey = (userId: string) => `email-user:${hashKeyPart(userId)}`;
+// The hits of a counter in the current window; [] when there is no row.
+const hitsOf = async (t: TestApp, key: string) =>
+  (
+    (await t.db.query('select hits from rate_limits where key = $1', [key]))
+      .rows as { hits: number }[]
+  ).map((row) => row.hits);
 
 // The windows of the daily limits are UTC days, counted from the epoch.
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -171,7 +179,7 @@ describe('POST /api/claims/:id/email with a fake mailer', () => {
       data: {
         sent: true,
         mode: 'sandbox',
-        delivered_to: 'inbox@example.test',
+        delivered_to: 'sandbox',
         would_have_gone_to: DEBTOR_EMAIL,
         event_recorded: false,
         provider_id: 'fake-1',
@@ -210,6 +218,8 @@ describe('POST /api/claims/:id/email with a fake mailer', () => {
     expect(after.events).toEqual([]);
     expect(after.next_action.action).toBe(before.next_action.action);
     expect(res.text).not.toContain('my-key-0001');
+    // The configured test recipient is not echoed back (it was used, as the message above shows).
+    expect(res.text).not.toContain('inbox@example.test');
   });
 
   it('in live mode sends to the debtor and records the demand, so the next action advances', async () => {
@@ -263,7 +273,7 @@ describe('POST /api/claims/:id/email with a fake mailer', () => {
     expect(res.json).toMatchObject({
       data: {
         mode: 'sandbox',
-        delivered_to: 'inbox@example.test',
+        delivered_to: 'sandbox',
         would_have_gone_to: DEBTOR_EMAIL,
         event_recorded: false,
       },
@@ -336,6 +346,221 @@ describe('POST /api/claims/:id/email with a fake mailer', () => {
     expect(mailer.attempts[1]?.idempotencyKey).toBe(
       mailer.attempts[0]?.idempotencyKey,
     ); // the provider sees the same key twice: that is what makes the retry safe
+  });
+
+  it('a replay burns no quota: the user and the global counters stay where the first send left them', async () => {
+    const { user, claimId } = await setup(t);
+
+    expect((await sendEmail(t, user, claimId, 'replay-key-1234')).status).toBe(
+      200,
+    );
+    for (let i = 0; i < 5; i += 1) {
+      const replay = await sendEmail(t, user, claimId, 'replay-key-1234');
+      expect(replay.status).toBe(409);
+    }
+
+    expect(await hitsOf(t, userLimitKey(user.id))).toEqual([1]);
+    expect(await hitsOf(t, 'email-global')).toEqual([1]);
+    // So the user still has their 2 other emails of the day.
+    expect((await sendEmail(t, user, claimId)).status).toBe(200);
+    expect((await sendEmail(t, user, claimId)).status).toBe(200);
+    expect((await sendEmail(t, user, claimId)).status).toBe(429);
+  });
+
+  it('a user at 3 of 3 gets 429 and the key of that request stays free for later', async () => {
+    const { user, claimId } = await setup(t);
+    for (let i = 0; i < 3; i += 1) {
+      expect((await sendEmail(t, user, claimId)).status).toBe(200);
+    }
+
+    const blocked = await sendEmail(t, user, claimId, 'later-key-12345');
+
+    expect(blocked.status, blocked.text).toBe(429);
+    expect(await emailLogCount(t, user.id)).toBe(3); // the key was released
+    expect(mailer.attempts).toHaveLength(3);
+    t.setNow('2026-10-31T00:00:30Z');
+    try {
+      const later = await sendEmail(t, user, claimId, 'later-key-12345');
+      expect(later.status, later.text).toBe(200); // not 409: the key was never spent
+    } finally {
+      t.setNow(NOW);
+    }
+  });
+
+  it('when the global limit refuses, the user keeps the quota counted before it and the key is free', async () => {
+    const { user, claimId } = await setup(t);
+    await fillCounter(t, 'email-global', 20);
+
+    const blocked = await sendEmail(t, user, claimId, 'global-key-1234');
+
+    expect(blocked.status, blocked.text).toBe(429);
+    expect(await hitsOf(t, userLimitKey(user.id))).toEqual([]); // counted, then given back
+    expect(await emailLogCount(t, user.id)).toBe(0);
+    await t.db.query(`delete from rate_limits where key = 'email-global'`);
+    const retried = await sendEmail(t, user, claimId, 'global-key-1234');
+    expect(retried.status, retried.text).toBe(200);
+    expect(await hitsOf(t, userLimitKey(user.id))).toEqual([1]);
+  });
+
+  it('a provider failure gives the quota back, so failures do not use up the 3 emails of the day', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const { user, claimId } = await setup(t);
+      mailer.failWith('PROVIDER_UNAVAILABLE');
+
+      for (let i = 0; i < 5; i += 1) {
+        const failed = await sendEmail(t, user, claimId);
+        expect(failed.status, failed.text).toBe(502);
+      }
+
+      expect(await hitsOf(t, userLimitKey(user.id))).toEqual([]);
+      expect(await hitsOf(t, 'email-global')).toEqual([]);
+      expect(await emailLogCount(t, user.id)).toBe(0);
+      mailer.failWith(null);
+      for (let i = 0; i < 3; i += 1) {
+        expect((await sendEmail(t, user, claimId)).status).toBe(200);
+      }
+      expect(await hitsOf(t, userLimitKey(user.id))).toEqual([3]);
+      expect(await hitsOf(t, 'email-global')).toEqual([3]);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('a failure after earlier sends gives back only its own hit', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const { user, claimId } = await setup(t);
+      expect((await sendEmail(t, user, claimId)).status).toBe(200);
+      mailer.failWith('PROVIDER_REJECTED');
+
+      expect((await sendEmail(t, user, claimId)).status).toBe(502);
+
+      expect(await hitsOf(t, userLimitKey(user.id))).toEqual([1]);
+      expect(await hitsOf(t, 'email-global')).toEqual([1]);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('a letter that cannot be built gives the quota back too', async () => {
+    const { user, claimId } = await setup(t);
+    await t.db.query(
+      `update claim_invoices set segments = '[]'::jsonb where claim_id = $1`,
+      [claimId],
+    );
+
+    const res = await sendEmail(t, user, claimId);
+
+    expect(res.status, res.text).toBe(422);
+    expect(await hitsOf(t, userLimitKey(user.id))).toEqual([]);
+    expect(await hitsOf(t, 'email-global')).toEqual([]);
+  });
+
+  describe('when the claim can no longer be demanded', () => {
+    const invoiceIdOf = async (claimId: string) =>
+      (
+        (
+          await t.db.query(
+            'select invoice_id from claim_invoices where claim_id = $1',
+            [claimId],
+          )
+        ).rows[0] as { invoice_id: string }
+      ).invoice_id;
+
+    const expectRefused = async (
+      user: TestUser,
+      claimId: string,
+      reason: string,
+    ) => {
+      const res = await sendEmail(t, user, claimId, 'actionable-key-12');
+
+      expect(res.status, res.text).toBe(422);
+      expect(errorOf(res)).toMatchObject({
+        code: 'CLAIM_NOT_ACTIONABLE',
+        details: { reason },
+      });
+      expect(errorOf(res).message).not.toBe('');
+      // Nothing was sent, claimed or counted.
+      expect(mailer.attempts).toHaveLength(0);
+      expect(await emailLogCount(t, user.id)).toBe(0);
+      expect(await hitsOf(t, userLimitKey(user.id))).toEqual([]);
+      expect(await hitsOf(t, 'email-global')).toEqual([]);
+    };
+
+    it.each(['CONSUMER', 'PUBLIC_ADMIN', 'UNKNOWN'] as const)(
+      'refuses with debtor_not_business when the debtor is now %s',
+      async (kind) => {
+        const { user, claimId, debtorId } = await setup(t);
+        await t.db.query('update debtors set kind = $2 where id = $1', [
+          debtorId,
+          kind,
+        ]);
+
+        await expectRefused(user, claimId, 'debtor_not_business');
+      },
+    );
+
+    it('refuses with marked_paid when the claim has a PAID event', async () => {
+      const { user, claimId } = await setup(t);
+      const marked = await t.call(
+        user,
+        'POST',
+        `/api/claims/${claimId}/events`,
+        { kind: 'PAID', occurred_on: '2026-10-30' },
+      );
+      expect(marked.status, marked.text).toBe(201);
+
+      await expectRefused(user, claimId, 'marked_paid');
+    });
+
+    it('refuses with invoice_paid when an invoice of the claim is now paid', async () => {
+      const { user, claimId } = await setup(t);
+      const paid = await t.call(
+        user,
+        'POST',
+        `/api/invoices/${await invoiceIdOf(claimId)}/payments`,
+        { paid_on: '2026-10-30', amount_cents: 100_000 },
+      );
+      expect(paid.status, paid.text).toBe(201);
+
+      await expectRefused(user, claimId, 'invoice_paid');
+    });
+
+    it('also refuses when only one invoice of several is paid', async () => {
+      const { user, claimId } = await setup(t, { numbers: ['F-1', 'F-2'] });
+      await t.db.query(
+        `update invoices set status = 'PAID'
+          where id = (select invoice_id from claim_invoices where claim_id = $1 limit 1)`,
+        [claimId],
+      );
+
+      await expectRefused(user, claimId, 'invoice_paid');
+    });
+
+    it('still sends a claim whose invoices are open and whose debtor is a business (control)', async () => {
+      const { user, claimId } = await setup(t);
+
+      const res = await sendEmail(t, user, claimId, 'actionable-key-12');
+
+      expect(res.status, res.text).toBe(200);
+      expect(mailer.sent).toHaveLength(1);
+    });
+
+    it('is checked after the profile check and before the limits', async () => {
+      const { user, claimId, debtorId } = await setup(t, { profile: null });
+      await t.db.query(`update debtors set kind = 'CONSUMER' where id = $1`, [
+        debtorId,
+      ]);
+
+      const res = await sendEmail(t, user, claimId);
+
+      expect(errorOf(res).code).toBe('PROFILE_INCOMPLETE');
+    });
   });
 
   describe('with the provider failing', () => {
@@ -771,8 +996,9 @@ describe('POST /api/claims/:id/email without a configuration', () => {
 
     expect(res.status, res.text).toBe(200);
     expect(res.json).toMatchObject({
-      data: { mode: 'sandbox', delivered_to: 'delivered@resend.dev' },
+      data: { mode: 'sandbox', delivered_to: 'sandbox' },
     });
+    expect(res.text).not.toContain('delivered@resend.dev');
     expect(mailer.sent[0]?.to).toBe(DEFAULT_EMAIL_CONFIG.testRecipient);
     expect(mailer.sent[0]?.from).toBe('Reclama <onboarding@resend.dev>');
     expect(mailer.sent[0]?.subject.startsWith('[PRUEBA] ')).toBe(true);

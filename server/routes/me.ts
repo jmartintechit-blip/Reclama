@@ -8,6 +8,7 @@ import { deleteUser, getPasswordHash } from '../db/users.ts';
 import { parseIban } from '../domain/iban.ts';
 import type { DefineRoute } from '../http/routes.ts';
 import { sendError } from '../middleware/errors.ts';
+import { MAX_SENDER_ADDRESS_LINES } from '../services/letter.ts';
 
 // A text field of the profile: trimmed, not empty (send null to clear it), at most `max`
 // characters, and without control characters (a NUL byte makes Postgres fail with a 500).
@@ -48,7 +49,15 @@ const iban = z
 const profileSchema = z.object({
   business_name: profileText(200).nullable().optional(),
   tax_id: profileText(30).nullable().optional(),
-  address: profileText(500, true).nullable().optional(),
+  address: profileText(500, true)
+    .refine(
+      (value) => value.split(/\r\n|\r|\n/).length <= MAX_SENDER_ADDRESS_LINES,
+      {
+        message: `Must have at most ${String(MAX_SENDER_ADDRESS_LINES)} lines`,
+      },
+    )
+    .nullable()
+    .optional(),
   iban: iban.nullable().optional(),
   default_compensation: z.enum(['NONE', 'PER_INVOICE', 'PER_CLAIM']).optional(),
 });

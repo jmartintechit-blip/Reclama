@@ -66,14 +66,18 @@ export const PDF_RATE_LIMIT: RateLimitSpec<unknown, Session> = {
 // The caller's address as it is used in rate-limit keys. A person (or a botnet host) with an
 // IPv6 network owns at least a whole /64, so counting each address separately would give an
 // attacker billions of free counters: an IPv6 address is reduced to its /64 prefix. An IPv4
-// address, and an IPv4-mapped IPv6 address (::ffff:1.2.3.4), count as the IPv4 address. Anything
-// else (such as "unknown") is returned as it is.
+// address, and an IPv4-mapped IPv6 address in any notation (::ffff:1.2.3.4, ::ffff:102:304,
+// 0:0:0:0:0:ffff:1.2.3.4), count as the IPv4 address, so one host cannot get two counters by
+// writing its address in two ways. A zone id ("%eth0") and a trailing port (1.2.3.4:5678,
+// [::1]:5678) are not part of the address. Anything else (such as "unknown") is returned as it is.
 export function ipKeyPart(ip: string): string {
-  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
-  if (mapped?.[1] !== undefined) return mapped[1];
+  const bracketed = /^\[([^\]]+)\](?::\d{1,5})?$/.exec(ip);
+  const bare = bracketed?.[1] ?? ip;
+  const withPort = /^(\d{1,3}(?:\.\d{1,3}){3}):\d{1,5}$/.exec(bare);
+  if (withPort?.[1] !== undefined) return withPort[1];
 
-  const address = ip.split('%')[0] ?? ''; // a zone id ("%eth0") is not part of the address
-  if (!isIPv6(address)) return ip;
+  const address = bare.split('%')[0] ?? ''; // a zone id is not part of the address
+  if (!isIPv6(address)) return bare;
 
   // Turn a dotted IPv4 tail ("::1.2.3.4") into two hex groups so that every group is hex.
   const dotted = /^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(address);
@@ -90,10 +94,20 @@ export function ipKeyPart(ip: string): string {
   const zeros = Array<string>(
     tail === undefined ? 0 : 8 - headGroups.length - tailGroups.length,
   ).fill('0');
-  const prefix = [...headGroups, ...zeros, ...tailGroups]
-    .slice(0, 4)
-    .map((group) => group.toLowerCase().padStart(4, '0'));
-  return `${prefix.join(':')}::/64`;
+  const groups = [...headGroups, ...zeros, ...tailGroups].map((group) =>
+    group.toLowerCase().padStart(4, '0'),
+  );
+
+  // IPv4-mapped: five zero groups, ffff, and the IPv4 address in the last two groups.
+  if (
+    groups.slice(0, 5).every((group) => group === '0000') &&
+    groups[5] === 'ffff'
+  ) {
+    const high = Number.parseInt(groups[6] ?? '', 16);
+    const low = Number.parseInt(groups[7] ?? '', 16);
+    return `${String(high >> 8)}.${String(high & 255)}.${String(low >> 8)}.${String(low & 255)}`;
+  }
+  return `${groups.slice(0, 4).join(':')}::/64`;
 }
 
 export interface RouteSpec<

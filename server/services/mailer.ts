@@ -71,10 +71,15 @@ async function readProviderId(response: Response): Promise<string | null> {
   }
 }
 
+// The serverless platform stops a function after a fixed time (10 s on the default settings). The
+// provider call has to give up and answer before that, or the function is cut off in the middle
+// of the request and the client gets a platform error instead of ours.
+const DEFAULT_TIMEOUT_MS = 6_000;
+
 export function createResendMailer({
   apiKey,
   fetchFn = fetch,
-  timeoutMs = 10_000,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }: {
   apiKey: string;
   fetchFn?: typeof fetch;

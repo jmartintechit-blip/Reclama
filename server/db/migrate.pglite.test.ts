@@ -25,10 +25,13 @@ afterAll(async () => {
 });
 
 describe('runMigrations against a real Postgres', () => {
-  it('applied 0001, 0002 and 0003 and recorded their checksums', async () => {
+  it('applied 0001 to 0004 and recorded their checksums', async () => {
     const initial = real.find((m) => m.name === '0001_initial_schema.sql');
     const guard = real.find((m) => m.name === '0002_payment_overpay_guard.sql');
     const order = real.find((m) => m.name === '0003_claim_event_order.sql');
+    const integrity = real.find(
+      (m) => m.name === '0004_integrity_and_indexes.sql',
+    );
     const { rows } = await db.query(
       'select name, checksum from schema_migrations order by name',
     );
@@ -42,6 +45,10 @@ describe('runMigrations against a real Postgres', () => {
       {
         name: '0003_claim_event_order.sql',
         checksum: sha256(order?.sql ?? ''),
+      },
+      {
+        name: '0004_integrity_and_indexes.sql',
+        checksum: sha256(integrity?.sql ?? ''),
       },
     ]);
     const tables = await db.query(
@@ -71,7 +78,7 @@ describe('runMigrations against a real Postgres', () => {
     const { rows } = await db.query(
       'select count(*) as n from schema_migrations',
     );
-    expect(rows[0]?.n).toBe(3);
+    expect(rows[0]?.n).toBe(4);
   });
 
   it('detects a migration that was modified after being applied', async () => {
@@ -97,7 +104,7 @@ describe('a broken migration', () => {
 
   it('rolls back a broken migration, records nothing and applies it once fixed', async () => {
     const broken: Migration = {
-      name: '0004_broken.sql',
+      name: '0005_broken.sql',
       sql: `create table half_done (id int);
             insert into half_done values (1);
             select * from does_not_exist;`,
@@ -117,6 +124,7 @@ describe('a broken migration', () => {
       '0001_initial_schema.sql',
       '0002_payment_overpay_guard.sql',
       '0003_claim_event_order.sql',
+      '0004_integrity_and_indexes.sql',
     ]);
 
     // Control: without the bad statement, the same migration is applied and recorded.

@@ -509,6 +509,42 @@ describe('POST /api/auth/login', () => {
   });
 });
 
+describe('POST /api/auth/login with a failing session purge', () => {
+  it('still logs the user in, and logs only the error name and the request id', async () => {
+    const user = await register();
+    const failing: Db = {
+      query: (sql, params) =>
+        sql.startsWith('delete from sessions where expires_at')
+          ? Promise.reject(new Error('disk full secret-detail'))
+          : db.query(sql, params),
+    };
+    const other = await listen(createApp({ db: failing, clock }));
+    try {
+      const res = await send(
+        '/api/auth/login',
+        { body: { email: user.email, password: PASSWORD } },
+        other.baseUrl,
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        data: { user: { id: user.id, email: user.email } },
+      });
+      expect((await getMe(cookieOf(res))).status).toBe(200); // the session really exists
+      const errors =
+        logSpies.find(({ level }) => level === 'error')?.spy.mock.calls ?? [];
+      expect(errors).toHaveLength(1);
+      expect(JSON.parse(String(errors[0]?.[0]))).toEqual({
+        level: 'error',
+        request_id: res.headers.get('x-request-id'),
+        error_name: 'Error',
+      });
+    } finally {
+      await close(other.server);
+    }
+    expect(logged()).not.toContain('secret-detail');
+  });
+});
+
 describe('POST /api/auth/logout', () => {
   it('deletes only the caller session; the same user and other users keep theirs', async () => {
     const user = await register();

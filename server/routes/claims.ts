@@ -4,6 +4,7 @@ import type { Db } from '../db/client.ts';
 import {
   addEvent,
   countClaims,
+  countEvents,
   createClaim,
   EVENT_KINDS,
   getClaim,
@@ -12,6 +13,8 @@ import {
   listClaims,
   listEscalationInputs,
   MAX_CLAIMS_PER_USER,
+  MAX_EVENTS_PER_CLAIM,
+  MAX_INVOICES_PER_CLAIM,
   type ClaimDetail,
 } from '../db/claims.ts';
 import { getDebtor } from '../db/debtors.ts';
@@ -114,6 +117,16 @@ function sendRepoError(res: Response, error: unknown): boolean {
   return true;
 }
 
+function sendClaimTooLarge(res: Response): void {
+  sendError(
+    res,
+    422,
+    'CLAIM_TOO_LARGE',
+    `A claim can hold at most ${String(MAX_INVOICES_PER_CLAIM)} invoices: choose some with invoice_ids and claim the rest in a second claim`,
+    { limit: MAX_INVOICES_PER_CLAIM },
+  );
+}
+
 export function registerClaimRoutes(
   defineRoute: DefineRoute,
   { db, clock }: { db: Db; clock: Clock },
@@ -201,6 +214,10 @@ export function registerClaimRoutes(
       // them: exactly those, and any that cannot be claimed makes the request fail.
       const requested = body.invoice_ids;
       const explicit = requested !== undefined;
+      if (explicit && requested.length > MAX_INVOICES_PER_CLAIM) {
+        sendClaimTooLarge(res);
+        return;
+      }
       const invoices = explicit
         ? await listInvoicesByIds(db, userId, requested)
         : await listInvoicesUpTo(
@@ -276,6 +293,12 @@ export function registerClaimRoutes(
             amount: p.amount_cents,
           })),
         });
+      }
+
+      // The same cap for the default selection: the user then claims the rest in a second claim.
+      if (inputs.length > MAX_INVOICES_PER_CLAIM) {
+        sendClaimTooLarge(res);
+        return;
       }
 
       const compensationMode =
@@ -395,6 +418,18 @@ export function registerClaimRoutes(
           422,
           'EVENT_BEFORE_CLAIM',
           'The event date is before the claim date',
+        );
+        return;
+      }
+      // Counted before anything is written. Requests that run at the same instant can pass the
+      // count together and overshoot by a few; the write rate limit keeps that small.
+      if ((await countEvents(db, userId, claim.id)) >= MAX_EVENTS_PER_CLAIM) {
+        sendError(
+          res,
+          422,
+          'EVENT_LIMIT_REACHED',
+          'The limit of events per claim has been reached',
+          { limit: MAX_EVENTS_PER_CLAIM },
         );
         return;
       }

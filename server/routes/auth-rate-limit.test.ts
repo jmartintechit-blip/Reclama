@@ -262,6 +262,44 @@ describe('POST /api/auth/login limit: 30 per 15 minutes per IP, for any email', 
     expect((await login(email, PASSWORD, '10.2.0.3')).status).toBe(200);
   });
 
+  it('is checked first: a request it refuses creates no row and counts nothing for the other two limits', async () => {
+    for (let i = 0; i < 30; i += 1) await login(newEmail(), WRONG, '10.2.2.2');
+    const fresh = newEmail();
+
+    const res = await login(fresh, WRONG, '10.2.2.2');
+
+    expect(res.status).toBe(429);
+    const { rows } = await db.query(
+      'select key, hits from rate_limits where key like $1 or key = $2',
+      [
+        `login:10.2.2.2:${hashKeyPart(fresh)}`,
+        `login-account:${hashKeyPart(fresh)}`,
+      ],
+    );
+    expect(rows).toEqual([]);
+    const ip = await db.query('select hits from rate_limits where key = $1', [
+      'login-ip:10.2.2.2',
+    ]);
+    expect(ip.rows).toEqual([{ hits: 31 }]); // the refused attempt itself is counted
+  });
+
+  it('lets the IP and email limit refuse before the account limit, which then counts nothing', async () => {
+    const email = newEmail();
+    for (let i = 0; i < 8; i += 1) await login(email, WRONG, '10.2.3.3');
+
+    const rows = async (key: string) =>
+      (await db.query('select hits from rate_limits where key = $1', [key]))
+        .rows;
+
+    expect(await rows('login-ip:10.2.3.3')).toEqual([{ hits: 8 }]);
+    expect(await rows(`login:10.2.3.3:${hashKeyPart(email)}`)).toEqual([
+      { hits: 8 }, // the refused attempts are counted too
+    ]);
+    expect(await rows(`login-account:${hashKeyPart(email)}`)).toEqual([
+      { hits: 5 },
+    ]);
+  });
+
   it('does not block a correct login because of failures on other emails', async () => {
     const victim = newEmail();
     const mine = newEmail();

@@ -7,6 +7,7 @@ import { getProfile } from '../db/profile.ts';
 import {
   hashKeyPart,
   hitRateLimit,
+  refundRateLimit,
   type RateLimitRule,
 } from '../db/rate-limits.ts';
 import {
@@ -36,7 +37,13 @@ import {
   type MailerErrorCode,
   type SendResult,
 } from '../services/mailer.ts';
-import { buildLetterData, letterFilename, profileProblems } from './letter.ts';
+import {
+  buildLetterData,
+  letterFilename,
+  notActionableReason,
+  profileProblems,
+  sendNotActionable,
+} from './letter.ts';
 
 // The client picks the key (a UUID is the usual choice) and sends the same one when it retries.
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
@@ -138,10 +145,13 @@ export function registerEmailRoute(
     emailConfig: EmailConfig;
   },
 ) {
-  // The order of the checks is part of the contract: what the caller got wrong first (the header),
-  // then what does not exist, then what the server lacks, then what the data lacks, then the
-  // limits, and only then the key is claimed and the email is sent. The limits are checked here
-  // and not by defineRoute, which would count them before the 404 and 422 answers above.
+  // The order of the steps is part of the contract: what the caller got wrong first (the header),
+  // then what does not exist, then what the server lacks, then what the data lacks (including a
+  // claim that can no longer be demanded), then the key is claimed, then the limits are counted,
+  // and only then the email is sent. The key comes before the limits so that a replay (409) never
+  // uses up quota; if a limit refuses, or the letter or the provider fails, the key is given back
+  // and the hits this request counted are refunded, because nothing was sent. The limits are
+  // checked here and not by defineRoute, which would count them before the 404 and 422 answers.
   defineRoute({
     method: 'POST',
     path: '/api/claims/:id/email',
@@ -209,12 +219,10 @@ export function registerEmailRoute(
         return;
       }
 
-      for (const rule of [userEmailLimit(userId), GLOBAL_EMAIL_LIMIT]) {
-        const result = await hitRateLimit(db, clock, rule);
-        if (!result.allowed) {
-          sendRateLimited(res, result.retryAfterSeconds);
-          return;
-        }
+      const reason = await notActionableReason(db, userId, claim, debtor);
+      if (reason !== null) {
+        sendNotActionable(res, reason);
+        return;
       }
 
       // Without a verified sending domain Resend delivers only to the account owner, and an open
@@ -235,6 +243,33 @@ export function registerEmailRoute(
           'EMAIL_ALREADY_SENT',
           'An email with this Idempotency-Key was already sent',
         );
+        return;
+      }
+
+      // Everything this request took (the key and the hits) is given back when nothing is sent.
+      const counted: RateLimitRule[] = [];
+      const giveBack = async () => {
+        await releaseEmailKey(db, userId, sendKey);
+        for (const rule of counted) await refundRateLimit(db, clock, rule);
+      };
+
+      let retryAfterSeconds: number | null = null;
+      try {
+        for (const rule of [userEmailLimit(userId), GLOBAL_EMAIL_LIMIT]) {
+          const result = await hitRateLimit(db, clock, rule);
+          if (!result.allowed) {
+            retryAfterSeconds = result.retryAfterSeconds;
+            break; // the refused hit stays counted, as in every other limit
+          }
+          counted.push(rule);
+        }
+      } catch (error) {
+        await giveBack(); // a failing limiter fails closed (500), and the key is not left claimed
+        throw error;
+      }
+      if (retryAfterSeconds !== null) {
+        await giveBack();
+        sendRateLimited(res, retryAfterSeconds);
         return;
       }
 
@@ -265,8 +300,9 @@ export function registerEmailRoute(
           idempotencyKey: sendKey,
         });
       } catch (error) {
-        // Nothing was sent: give the key back so the client can retry with the same one.
-        await releaseEmailKey(db, userId, sendKey);
+        // Nothing was sent: give the key and the hits back so the client can retry with the
+        // same key.
+        await giveBack();
         if (error instanceof LetterDataError) {
           sendError(
             res,
@@ -327,7 +363,9 @@ export function registerEmailRoute(
         data: {
           sent: true,
           mode: sandbox ? 'sandbox' : 'live',
-          delivered_to: to,
+          // The test recipient is configuration, not the caller's business: in the sandbox it is
+          // not echoed back. In live mode the caller already knows the debtor's address.
+          delivered_to: sandbox ? 'sandbox' : debtorEmail,
           would_have_gone_to: sandbox ? debtorEmail : null,
           event_recorded: eventRecorded,
           provider_id: sent.id,

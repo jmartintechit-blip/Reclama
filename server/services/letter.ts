@@ -16,6 +16,16 @@ import { sanitizeForPdf } from '../domain/pdf-text.ts';
 // Calendar days, counted from the date of the letter, that the debtor has to pay.
 export const PAYMENT_DEADLINE_DAYS = 10;
 
+// How much one letter may hold. A claim can have 100 invoices; these limits keep a letter of
+// absurd size (and the time and memory to draw it) from being generated: the number of interest
+// segments in the annex, and the number of pages.
+export const MAX_LETTER_SEGMENTS = 1500;
+export const MAX_LETTER_PAGES = 40;
+
+// The sender's address is printed on at most this many lines, so the block of the date and the
+// reference, drawn next to it, always stays on the first page.
+export const MAX_SENDER_ADDRESS_LINES = 6;
+
 // The data cannot be turned into a letter (for example an invoice without interest segments).
 export class LetterDataError extends Error {
   constructor(message: string) {
@@ -106,7 +116,8 @@ function draw(doc: Doc, data: LetterData): void {
     lines: data.sender.address
       .split(/\r\n|\r|\n/)
       .map(clean)
-      .filter((line) => line !== ''),
+      .filter((line) => line !== '')
+      .slice(0, MAX_SENDER_ADDRESS_LINES),
     iban: data.sender.iban === null ? null : clean(data.sender.iban),
   };
   const debtorName = clean(data.debtor.name);
@@ -124,6 +135,9 @@ function draw(doc: Doc, data: LetterData): void {
   const heightOf = (text: string, width: number, font: string, size: number) =>
     style(font, size).heightOfString(text, { width });
   const newPage = () => {
+    if (doc.bufferedPageRange().count >= MAX_LETTER_PAGES) {
+      throw new LetterDataError('The letter would have too many pages');
+    }
     doc.addPage();
     y = MARGIN_TOP;
   };
@@ -632,6 +646,14 @@ export function renderLetter(data: LetterData): Promise<Buffer> {
         resolve(Buffer.concat(chunks));
       });
       doc.on('error', reject);
+
+      const segmentCount = data.invoices.reduce(
+        (sum, invoice) => sum + invoice.segments.length,
+        0,
+      );
+      if (segmentCount > MAX_LETTER_SEGMENTS) {
+        throw new LetterDataError('The claim has too many interest segments');
+      }
 
       doc.addPage();
       draw(doc, data);

@@ -234,6 +234,13 @@ describe('isolation between users', () => {
   const claimOfA = `insert into claims (id, user_id, debtor_id, as_of, compensation_mode, principal_cents,
       interest_cents, compensation_cents, total_cents, calc_version)
     values ('${otherClaim}', '${A.user}', '${A.debtor}', '2026-10-01', 'NONE', 100, 0, 0, 100, 'v1');`;
+  // A second invoice of A for the controls: an invoice can be in only ONE claim of its user
+  // (unique index on claim_invoices), so a control cannot reuse the invoice A.invoice, which is
+  // already in A's claim. It is also in the bad rows below, so that the foreign key (and not the
+  // unique index) is what rejects them.
+  const spare = uuid(2_998);
+  const spareInvoice = `insert into invoices (id, user_id, debtor_id, number, issue_date, amount_cents)
+    values ('${spare}', '${A.user}', '${A.debtor}', 'F9', '2026-01-01', 100);`;
   const cases: [string, string, string][] = [
     [
       'an invoice of A for a debtor of B',
@@ -252,13 +259,15 @@ describe('isolation between users', () => {
     ],
     [
       'a claim_invoice of A for an invoice of B',
-      claimOfA + insertClaimInvoice(A.user, otherClaim, A.invoice),
-      claimOfA + insertClaimInvoice(A.user, otherClaim, B.invoice),
+      spareInvoice + claimOfA + insertClaimInvoice(A.user, otherClaim, spare),
+      spareInvoice +
+        claimOfA +
+        insertClaimInvoice(A.user, otherClaim, B.invoice),
     ],
     [
       'a claim_invoice of A for a claim of B',
-      claimOfA + insertClaimInvoice(A.user, otherClaim, A.invoice),
-      insertClaimInvoice(A.user, B.claim, A.invoice),
+      spareInvoice + claimOfA + insertClaimInvoice(A.user, otherClaim, spare),
+      spareInvoice + insertClaimInvoice(A.user, B.claim, spare),
     ],
     [
       'a claim_event of A for a claim of B',
@@ -274,6 +283,36 @@ describe('isolation between users', () => {
     await inRollback(async () => {
       await expect(db.query(bad)).rejects.toMatchObject({
         code: FOREIGN_KEY_VIOLATION,
+      });
+    });
+  });
+});
+
+describe('one claim per invoice', () => {
+  // A's invoice is already in A's claim (seedUser). The control puts a spare invoice in a second
+  // claim; the bad row puts the invoice that is already claimed in a second claim.
+  const secondClaim = uuid(3_997);
+  const spare = uuid(2_997);
+  const setup = `insert into claims (id, user_id, debtor_id, as_of, compensation_mode, principal_cents,
+      interest_cents, compensation_cents, total_cents, calc_version)
+    values ('${secondClaim}', '${A.user}', '${A.debtor}', '2026-10-01', 'NONE', 100, 0, 0, 100, 'v1');
+    insert into invoices (id, user_id, debtor_id, number, issue_date, amount_cents)
+    values ('${spare}', '${A.user}', '${A.debtor}', 'F8', '2026-01-01', 100);`;
+
+  it('refuses the same invoice in two claims of one user', async () => {
+    await inRollback(async () => {
+      await db.query(setup);
+      await expect(
+        db.query(insertClaimInvoice(A.user, secondClaim, spare)),
+      ).resolves.toBeDefined();
+    });
+    await inRollback(async () => {
+      await db.query(setup);
+      await expect(
+        db.query(insertClaimInvoice(A.user, secondClaim, A.invoice)),
+      ).rejects.toMatchObject({
+        code: UNIQUE_VIOLATION,
+        constraint: 'claim_invoices_one_claim_per_invoice',
       });
     });
   });

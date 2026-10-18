@@ -16,6 +16,7 @@ import {
   listClaimedInvoiceIds,
   listClaims,
 } from './claims.ts';
+import type { Db } from './client.ts';
 import { findOrCreateDebtor } from './debtors.ts';
 import { createInvoice } from './invoices.ts';
 import { seedRates } from './rates-seed.ts';
@@ -219,6 +220,56 @@ describe('createClaim refuses without leaving anything behind', () => {
     expect([
       ...(await listClaimedInvoiceIds(db, userId, [a.id, b.id])),
     ]).toEqual([a.id]);
+  });
+
+  it('two createClaim calls for the same invoices: the second fails with the conflict error and leaves nothing', async () => {
+    const { userId, debtor, a, b } = await setup();
+    const input = {
+      debtor_id: debtor.id,
+      as_of: AS_OF,
+      result: calculate([a, b]),
+    };
+
+    const first = await createClaim(db, userId, input);
+    await expect(createClaim(db, userId, input)).rejects.toMatchObject({
+      code: 'INVOICE_IN_CLAIM',
+    });
+
+    expect(await count('claims', userId)).toBe(1);
+    expect(await count('claim_invoices', userId)).toBe(2);
+    expect((await getClaim(db, userId, first))?.lines).toHaveLength(2);
+  });
+
+  it('the unique index refuses a second claim even when the check inside the statement did not see the first one', async () => {
+    const { userId, debtor, a, b } = await setup();
+    await createClaim(db, userId, {
+      debtor_id: debtor.id,
+      as_of: AS_OF,
+      result: calculate([a]),
+    });
+    // Two requests at the same instant: the "not already in a claim" check of the second one
+    // works on a snapshot taken before the first one committed. Simulated by emptying the list
+    // of invoices that check looks at (the 10th parameter), while the lines still carry them.
+    const blind: Db = {
+      query: (sql, params) =>
+        db.query(
+          sql,
+          sql.includes('with new_claim')
+            ? params?.map((param, i) => (i === 9 ? [] : param))
+            : params,
+        ),
+    };
+
+    await expect(
+      createClaim(blind, userId, {
+        debtor_id: debtor.id,
+        as_of: AS_OF,
+        result: calculate([b, a]),
+      }),
+    ).rejects.toMatchObject({ code: 'INVOICE_IN_CLAIM' });
+
+    expect(await count('claims', userId)).toBe(1); // the whole statement failed: no half claim
+    expect(await count('claim_invoices', userId)).toBe(1);
   });
 
   it('an invoice of another user: no claim row survives the failed line', async () => {

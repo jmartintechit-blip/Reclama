@@ -10,10 +10,12 @@ import type { Db } from './client.ts';
 import {
   CLAIM_DEBTOR_FK,
   CLAIM_INVOICE_FK,
+  CLAIM_INVOICE_UNIQUE,
   DebtorNotFoundError,
   FOREIGN_KEY_VIOLATION,
   InvoiceInClaimError,
   InvoiceNotFoundError,
+  UNIQUE_VIOLATION,
   violates,
 } from './errors.ts';
 import { normalizePage, type Page } from './query-helpers.ts';
@@ -23,6 +25,13 @@ import { normalizePage, type Page } from './query-helpers.ts';
 
 // The most claims one user can have. It bounds what one account can store.
 export const MAX_CLAIMS_PER_USER = 500;
+
+// The most invoices one claim can hold. It bounds the stored lines and the size of the letter;
+// the rest of the invoices go in a second claim.
+export const MAX_INVOICES_PER_CLAIM = 100;
+
+// The most events one claim can have. It bounds what one claim can store and show.
+export const MAX_EVENTS_PER_CLAIM = 200;
 
 export const EVENT_KINDS = [
   'REMINDER_SENT',
@@ -88,8 +97,9 @@ export interface NewClaim {
 // Throws InvoiceInClaimError when an invoice is already in a claim, DebtorNotFoundError when the
 // debtor is missing or not the user's and InvoiceNotFoundError for a missing or foreign invoice.
 // The "already in a claim" check works on the snapshot of the statement, so two claims created at
-// the very same instant for the same invoice can both pass it (the write rate limit keeps that
-// rare).
+// the very same instant for the same invoice can both pass it; the unique index on
+// (user_id, invoice_id) then refuses the second one, which is reported as InvoiceInClaimError
+// too (the whole statement fails, so no half-created claim is left).
 export async function createClaim(
   db: Db,
   userId: string,
@@ -143,6 +153,9 @@ export async function createClaim(
     }
     if (violates(error, FOREIGN_KEY_VIOLATION, CLAIM_INVOICE_FK)) {
       throw new InvoiceNotFoundError();
+    }
+    if (violates(error, UNIQUE_VIOLATION, CLAIM_INVOICE_UNIQUE)) {
+      throw new InvoiceInClaimError();
     }
     throw error;
   }
@@ -291,6 +304,18 @@ export async function listClaimedInvoiceIds(
   return new Set(
     (rows as { invoice_id: string }[]).map((row) => row.invoice_id),
   );
+}
+
+export async function countEvents(
+  db: Db,
+  userId: string,
+  claimId: string,
+): Promise<number> {
+  const { rows } = await db.query(
+    'select count(*)::int as n from claim_events where user_id = $1 and claim_id = $2',
+    [userId, claimId],
+  );
+  return (rows[0] as { n: number }).n;
 }
 
 // Records an event of the claim and nothing else (the invoices are not touched). Returns null

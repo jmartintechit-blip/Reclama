@@ -20,6 +20,7 @@ import type { Clock } from '../domain/dates.ts';
 import { EMAIL_MAX_LENGTH, EMAIL_PATTERN } from '../domain/email.ts';
 import type { DefineRoute } from '../http/routes.ts';
 import { sendError } from '../middleware/errors.ts';
+import { getRequestId } from '../middleware/request-id.ts';
 
 // Trim and lowercase first, then the length, then the shape (see domain/email.ts).
 export const email = z
@@ -94,16 +95,24 @@ export function registerAuthRoutes(
     path: '/api/auth/login',
     auth: 'public',
     schema: { body: loginSchema },
-    // Three counters, checked in this order (the first one that refuses answers 429 and the
-    // others do not count that request, so a blocked attacker cannot burn the victim's counter):
+    // Three counters, checked in this order: the first one that refuses answers 429 and the
+    // ones after it do not count that request (and do not even create their rows), so a blocked
+    // attacker cannot burn the victim's counters or fill the table with keys. The cheapest and
+    // widest rule goes first, because it is the one that refuses a flood from one host:
+    // - any email from one IP (an IPv6 address counts as its /64): 30 per 15 minutes. This
+    //   stops one host from trying many accounts. Others behind the same address share it;
     // - one email from one IP: 5 per 15 minutes;
     // - one email from anywhere: 20 per 15 minutes. This stops guessing spread over many IPs,
     //   but it has a price: someone who knows an email can send 20 wrong attempts and lock the
     //   real owner out of that account for up to 15 minutes (a denial of service on one
-    //   account, with no way into it). We accept it: a short lockout is cheaper than guessing;
-    // - any email from one IP (an IPv6 address counts as its /64): 30 per 15 minutes. This
-    //   stops one host from trying many accounts. Others behind the same address share it.
+    //   account, with no way into it). We accept it: a short lockout is cheaper than guessing.
     rateLimit: [
+      {
+        name: 'login-ip',
+        limit: 30,
+        windowSeconds: 15 * 60,
+        key: (_body, ip) => ip,
+      },
       {
         name: 'login',
         limit: 5,
@@ -115,12 +124,6 @@ export function registerAuthRoutes(
         limit: 20,
         windowSeconds: 15 * 60,
         key: (body) => hashKeyPart(body.email),
-      },
-      {
-        name: 'login-ip',
-        limit: 30,
-        windowSeconds: 15 * 60,
-        key: (_body, ip) => ip,
       },
     ],
     handler: async ({ res, body }) => {
@@ -151,7 +154,18 @@ export function registerAuthRoutes(
 
       // Housekeeping without a cron job (as in the rate limits): a login also removes the
       // sessions that have already expired, so the table does not fill up with dead rows.
-      await deleteExpiredSessions(db, clock.now());
+      // Best effort: a failure here must never fail a login that was correct.
+      try {
+        await deleteExpiredSessions(db, clock.now());
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            request_id: getRequestId(res),
+            error_name: error instanceof Error ? error.name : 'NonError',
+          }),
+        );
+      }
       await startSession(db, clock, res, found.id);
       res.json({ data: { user: { id: found.id, email: found.email } } });
     },

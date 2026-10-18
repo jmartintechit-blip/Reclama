@@ -244,6 +244,74 @@ describe('GET /api/claims/:id/letter.pdf', () => {
     expect(res.text).not.toContain('%PDF');
   });
 
+  describe('when the claim can no longer be demanded', () => {
+    const expectRefused = async (
+      user: TestUser,
+      claimId: string,
+      reason: string,
+    ) => {
+      const res = await letter(user, claimId);
+
+      expect(res.status, res.text).toBe(422);
+      expect(errorOf(res)).toMatchObject({
+        code: 'CLAIM_NOT_ACTIONABLE',
+        details: { reason },
+      });
+      expect(errorOf(res).message).not.toBe('');
+      expect(res.text).not.toContain('%PDF');
+    };
+
+    it.each(['CONSUMER', 'PUBLIC_ADMIN', 'UNKNOWN'] as const)(
+      'refuses with debtor_not_business when the debtor is now %s',
+      async (kind) => {
+        const { user, claimId, invoice } = await setup();
+        await t.db.query('update debtors set kind = $2 where id = $1', [
+          invoice.debtor_id,
+          kind,
+        ]);
+
+        await expectRefused(user, claimId, 'debtor_not_business');
+      },
+    );
+
+    it('refuses with marked_paid when the claim has a PAID event', async () => {
+      const { user, claimId } = await setup();
+      const marked = await t.call(
+        user,
+        'POST',
+        `/api/claims/${claimId}/events`,
+        { kind: 'PAID', occurred_on: '2026-10-30' },
+      );
+      expect(marked.status, marked.text).toBe(201);
+
+      await expectRefused(user, claimId, 'marked_paid');
+    });
+
+    it('refuses with invoice_paid when an invoice of the claim is now paid', async () => {
+      const { user, claimId, invoice } = await setup();
+      const paid = await t.call(
+        user,
+        'POST',
+        `/api/invoices/${invoice.id}/payments`,
+        { paid_on: '2026-10-30', amount_cents: 100_000 },
+      );
+      expect(paid.status, paid.text).toBe(201);
+
+      await expectRefused(user, claimId, 'invoice_paid');
+    });
+
+    it('still gives the PDF while the debtor is a business and nothing is paid (control)', async () => {
+      const { user, claimId } = await setup();
+      const note = await t.call(user, 'POST', `/api/claims/${claimId}/events`, {
+        kind: 'NOTE',
+        occurred_on: '2026-10-30',
+      });
+      expect(note.status, note.text).toBe(201);
+
+      expect((await letter(user, claimId)).status).toBe(200);
+    });
+  });
+
   it('handles names that Helvetica cannot draw, and builds an ASCII file name from the claim', async () => {
     const { user, claimId } = await setup({
       debtor: { name: 'Łukasz 株式会社 S.L.', tax_id: 'Ő-1' },

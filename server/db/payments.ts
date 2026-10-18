@@ -11,6 +11,10 @@ import {
 // Every function takes `userId` first and puts `user_id` in its SQL: an id alone is never
 // trusted. A payment or invoice of another user behaves exactly like one that does not exist.
 
+// The most payments one invoice can have. It bounds the interest segments of an invoice (every
+// payment can split one) and so the size of a claim and of its letter.
+export const MAX_PAYMENTS_PER_INVOICE = 200;
+
 export interface Payment {
   id: string;
   invoice_id: string;
@@ -86,6 +90,18 @@ export async function addPayment(
   const found = balance[0] as { remaining_cents: number } | undefined;
   if (!found) return null;
   throw new PaymentExceedsBalanceError(toCents(found.remaining_cents));
+}
+
+export async function countPayments(
+  db: Db,
+  userId: string,
+  invoiceId: string,
+): Promise<number> {
+  const { rows } = await db.query(
+    'select count(*)::int as n from payments where user_id = $1 and invoice_id = $2',
+    [userId, invoiceId],
+  );
+  return (rows[0] as { n: number }).n;
 }
 
 // Oldest first. An empty list means "no payments" or "not the user's invoice": the caller

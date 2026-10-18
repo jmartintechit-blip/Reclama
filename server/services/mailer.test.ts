@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFakeMailer } from './fake-mailer.ts';
 import {
   createResendMailer,
@@ -192,6 +192,25 @@ describe('createResendMailer', () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  it('gives up after 6 seconds by default, before a 10 second function limit', async () => {
+    vi.useFakeTimers();
+    const fetchFn: typeof fetch = () => new Promise<Response>(() => undefined);
+    let outcome: 'pending' | 'rejected' = 'pending';
+    const result = createResendMailer({ apiKey: API_KEY, fetchFn })
+      .send(MESSAGE)
+      .catch((error: unknown) => {
+        outcome = 'rejected';
+        return error;
+      });
+
+    await vi.advanceTimersByTimeAsync(5_999);
+    expect(outcome).toBe('pending');
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(outcome).toBe('rejected');
+    expect(await result).toMatchObject({ code: 'PROVIDER_UNAVAILABLE' });
+  });
+
   it('does not abort a request that finished in time', async () => {
     let signal: AbortSignal | undefined;
     const fetchFn: typeof fetch = (_input, init) => {
@@ -206,6 +225,10 @@ describe('createResendMailer', () => {
 
     expect(signal?.aborted).toBe(false);
   });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('createFakeMailer', () => {

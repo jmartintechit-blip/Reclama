@@ -55,3 +55,29 @@ export async function hitRateLimit(
     retryAfterSeconds: Math.ceil((windowStart + windowMs - now) / 1000),
   };
 }
+
+// Gives back one hit that hitRateLimit counted, for a request that ended up doing nothing the
+// limit is meant to bound (an email that was never sent). Same key and window computation as
+// hitRateLimit. The counter never goes below zero: a row at one hit is removed (the column must
+// stay above zero) and a window that has no row is left alone. ONE statement whose two parts
+// see the same snapshot, so they never touch the same row. If another request raises the
+// counter at that very moment, the refund may not be applied, which only favours the limit.
+export async function refundRateLimit(
+  db: Db,
+  clock: Clock,
+  { key, windowSeconds }: RateLimitRule,
+): Promise<void> {
+  const windowMs = windowSeconds * 1000;
+  const windowStart = new Date(
+    Math.floor(clock.now().getTime() / windowMs) * windowMs,
+  ).toISOString();
+  await db.query(
+    `with lowered as (
+       update rate_limits set hits = hits - 1
+        where key = $1 and window_start = $2 and hits > 1
+       returning 1
+     )
+     delete from rate_limits where key = $1 and window_start = $2 and hits <= 1`,
+    [key, windowStart],
+  );
+}

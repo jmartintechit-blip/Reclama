@@ -352,6 +352,38 @@ describe('PATCH /api/me/profile', () => {
     expect(await storedProfile(user.id)).toEqual(EMPTY_PROFILE);
   });
 
+  it('accepts an address of 6 lines and refuses one of 7, however the lines are separated', async () => {
+    const user = await makeUser();
+    const lines = (n: number, separator: string) =>
+      Array.from({ length: n }, (_, i) => `Line ${String(i + 1)}`).join(
+        separator,
+      );
+
+    for (const separator of ['\n', '\r\n', '\r']) {
+      const six = await patchProfile(
+        { address: lines(6, separator) },
+        user.cookie,
+      );
+      const seven = await patchProfile(
+        { address: lines(7, separator) },
+        user.cookie,
+      );
+      expect(six.status, JSON.stringify(separator)).toBe(200);
+      expect(seven.status, JSON.stringify(separator)).toBe(400);
+      expect((await errorOf(seven)).details?.[0]).toEqual({
+        path: 'address',
+        message: 'Must have at most 6 lines',
+      });
+    }
+    // Spaces around the text do not make a line: the value is trimmed first.
+    const padded = await patchProfile(
+      { address: `\n\n  ${lines(6, '\n')}  \n\n` },
+      user.cookie,
+    );
+    expect(padded.status).toBe(200);
+    expect((await storedProfile(user.id))?.address).toBe(lines(6, '\n'));
+  });
+
   it('allows line breaks and tabs in the address but not a NUL character', async () => {
     const user = await makeUser();
 

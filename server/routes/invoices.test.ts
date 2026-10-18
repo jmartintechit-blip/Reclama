@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { MAX_INVOICES_PER_USER } from '../db/invoices.ts';
+import { MAX_PAYMENTS_PER_INVOICE } from '../db/payments.ts';
 import { hashKeyPart } from '../db/rate-limits.ts';
 import { putInClaim } from '../db/test-fixtures.ts';
 import {
@@ -1553,6 +1554,41 @@ describe('invoice limit per user', () => {
       201,
     );
   }, 60_000);
+});
+
+describe('payment limit per invoice', () => {
+  it('refuses the payment after the limit with PAYMENT_LIMIT_REACHED, creating nothing, and only for that invoice', async () => {
+    const user = await t.makeUser();
+    const invoice = await create(user);
+    const other = await create(user, {
+      debtor: undefined,
+      number: 'F-2',
+      debtor_id: invoice.debtor_id,
+    });
+    // Everything but one place is taken (written straight to the database).
+    await t.db.query(
+      `insert into payments (user_id, invoice_id, paid_on, amount_cents)
+       select $1::uuid, $2::uuid, '2026-10-01', 1 from generate_series(1, $3::int)`,
+      [user.id, invoice.id, MAX_PAYMENTS_PER_INVOICE - 1],
+    );
+
+    const last = await pay(user, invoice.id, '2026-10-02', 1);
+    const over = await pay(user, invoice.id, '2026-10-02', 1);
+
+    expect(last.status, last.text).toBe(201);
+    expect(over.status, over.text).toBe(422);
+    expect(errorOf(over)).toMatchObject({
+      code: 'PAYMENT_LIMIT_REACHED',
+      details: { limit: MAX_PAYMENTS_PER_INVOICE },
+    });
+    const { rows } = await t.db.query(
+      'select count(*)::int as n from payments where invoice_id = $1',
+      [invoice.id],
+    );
+    expect(rows).toEqual([{ n: MAX_PAYMENTS_PER_INVOICE }]);
+    // The limit is per invoice.
+    expect((await pay(user, other.id, '2026-10-02', 1)).status).toBe(201);
+  });
 });
 
 describe('write rate limit', () => {

@@ -1,6 +1,7 @@
+import type { Response } from 'express';
 import type { Db } from '../db/client.ts';
 import { getClaim, type ClaimDetail } from '../db/claims.ts';
-import { getDebtor } from '../db/debtors.ts';
+import { getDebtor, type Debtor } from '../db/debtors.ts';
 import { listInvoicesByIds } from '../db/invoices.ts';
 import { getProfile, type Profile } from '../db/profile.ts';
 import { addDays, todayMadrid, type Clock } from '../domain/dates.ts';
@@ -53,6 +54,50 @@ export function letterFilename(claim: ClaimDetail): string {
     .slice(0, 40)
     .replace(/-+$/, '');
   return `requerimiento-${slug === '' ? claim.id.slice(0, 8) : slug}.pdf`;
+}
+
+export type NotActionableReason =
+  'debtor_not_business' | 'marked_paid' | 'invoice_paid';
+
+const NOT_ACTIONABLE_MESSAGES: Record<NotActionableReason, string> = {
+  debtor_not_business:
+    'The debtor is no longer a business, so a demand cannot be issued for this claim',
+  marked_paid: 'The claim has been marked as paid',
+  invoice_paid: 'An invoice of the claim has been paid since it was created',
+};
+
+// A claim is frozen, but what the letter says ("you owe this") has to be true on the day it is
+// issued: the debtor may have been reclassified, or the claim paid, after the claim was created.
+// Returns why the demand must not go out now, or null when it can. A missing debtor is left to
+// buildLetterData, which reports it.
+export async function notActionableReason(
+  db: Db,
+  userId: string,
+  claim: ClaimDetail,
+  debtor: Debtor | null,
+): Promise<NotActionableReason | null> {
+  if (debtor !== null && debtor.kind !== 'BUSINESS') {
+    return 'debtor_not_business';
+  }
+  if (claim.events.some((event) => event.kind === 'PAID')) return 'marked_paid';
+  const invoices = await listInvoicesByIds(
+    db,
+    userId,
+    claim.lines.map((line) => line.invoice_id),
+  );
+  if (invoices.some((invoice) => invoice.status === 'PAID')) {
+    return 'invoice_paid';
+  }
+  return null;
+}
+
+export function sendNotActionable(
+  res: Response,
+  reason: NotActionableReason,
+): void {
+  sendError(res, 422, 'CLAIM_NOT_ACTIONABLE', NOT_ACTIONABLE_MESSAGES[reason], {
+    reason,
+  });
 }
 
 // The frozen numbers of the claim plus the few facts that only live in the invoice and the debtor.
@@ -141,6 +186,17 @@ export function registerLetterRoute(
           'Complete your business profile to generate the letter',
           problems,
         );
+        return;
+      }
+
+      const reason = await notActionableReason(
+        db,
+        userId,
+        claim,
+        await getDebtor(db, userId, claim.debtor_id),
+      );
+      if (reason !== null) {
+        sendNotActionable(res, reason);
         return;
       }
 
