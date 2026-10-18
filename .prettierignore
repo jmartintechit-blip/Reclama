@@ -2,3 +2,5 @@
 package-lock.json
 # Approved plan, kept verbatim (Prettier would re-align its tables)
 docs/PLAN.md
+# Approved design sketches: kept exactly as drawn (the standalone copy embeds its fonts)
+docs/design/

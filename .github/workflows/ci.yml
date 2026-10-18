@@ -23,13 +23,14 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+      - name: Build web
+        run: npm run web:build
       - name: Check formatting
         run: npm run format:check
       - name: Test
         run: npm test
       - name: Verify interest rate table
         run: npm run rates:verify
-      # To add with its task (plan section 8): the web build (T28).
       # Warning only (plan section 8): a registry hiccup or a new advisory must not block merges.
       - name: Audit production dependencies
         run: npm audit --omit=dev

@@ -1,8 +1,9 @@
 [build]
-# The build checks the types and applies the database migrations (plan section 9, T07).
+# The build checks the types, applies the database migrations, seeds the interest rates and
+# builds the web app (Vite).
 command = "npm run build"
-# Without a publish folder Netlify would publish the repository root.
-publish = "public"
+# The web app's build output. Without a publish folder Netlify would publish the repository root.
+publish = "web/dist"
 
 [functions]
 # pdfkit reads its standard-font data at runtime through createRequire and a "#standard-fonts/*" import
@@ -10,3 +11,23 @@ publish = "public"
 # the PDF endpoint answers 500). As an external module it is shipped, with its own dependencies, next to
 # the bundle. Checked only with a local esbuild emulation: the day-3 deployment check (T07) must prove it.
 external_node_modules = ["pdfkit"]
+
+# Single-page app: any path that is not a file serves the app, which then shows its own 404 page.
+# The API function declares its own path (/api/*) and this rule must not capture it. That cannot be
+# checked locally: on the deployed URL, GET /api/health must answer JSON, not the app's HTML. If it
+# answers HTML, add a redirect for /api/* before this one.
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
+
+[[headers]]
+for = "/*"
+  [headers.values]
+  # No inline scripts or styles anywhere: the app ships one script, one stylesheet and its own fonts.
+  Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  X-Content-Type-Options = "nosniff"
+  Referrer-Policy = "strict-origin-when-cross-origin"
+  Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+  X-Frame-Options = "DENY"
+  Strict-Transport-Security = "max-age=31536000; includeSubDomains"

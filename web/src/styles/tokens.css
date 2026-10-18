@@ -1,0 +1,29 @@
+/* Design tokens. Light and dark come from one declaration each through light-dark(), which
+   follows the visitor's system setting (color-scheme). */
+:root {
+  color-scheme: light dark;
+
+  /* Grey-green paper, navy ink and one green accent, the "verde timbre". */
+  --paper: light-dark(#f2f5f3, #0c141f);
+  --card: light-dark(#ffffff, #131e2c);
+  --ink: light-dark(#0f1b2d, #e9eef3);
+  --muted: light-dark(#4a5a6b, #a3b1c0);
+  --line: light-dark(#d2dbd7, #263548);
+  --accent: light-dark(#0b6b58, #5fd0b0);
+  --accent-ink: light-dark(#ffffff, #0c141f);
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, var(--card));
+  --accent-mid: color-mix(in oklab, var(--accent) 34%, var(--card));
+  --danger: light-dark(#b3261e, #ff9c93);
+  --danger-bg: light-dark(#fdecea, #3a1b19);
+
+  --font:
+    'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  --s--1: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --s-0: clamp(1rem, 0.96rem + 0.15vw, 1.0625rem);
+  --s-1: clamp(1.1875rem, 1.1rem + 0.4vw, 1.375rem);
+  --s-2: clamp(1.5rem, 1.3rem + 0.9vw, 2rem);
+  --s-3: clamp(1.75rem, 1.4rem + 1.6vw, 2.75rem);
+  --s-4: clamp(2.375rem, 1.6rem + 3.6vw, 4.25rem);
+}

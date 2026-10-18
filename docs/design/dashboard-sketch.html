@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Reclama · propuesta de diseño</title>
+    <style>
+      /* ---------- Tokens: una sola fuente de verdad, claro y oscuro con light-dark() ---------- */
+      :root {
+        color-scheme: light dark;
+        --bg: light-dark(#f6f7f9, #0f141b);
+        --surface: light-dark(#ffffff, #161d26);
+        --surface-2: light-dark(#eef1f5, #1d2631);
+        --border: light-dark(#d5dbe3, #2c3745);
+        --text: light-dark(#1a2330, #e8ecf2);
+        --muted: light-dark(#475366, #a9b4c4);
+        --primary: light-dark(#1f4e79, #8fbbea);
+        --primary-text: light-dark(#ffffff, #0f141b);
+        --danger: light-dark(#b42318, #ff9a90);
+        --danger-bg: light-dark(#fdecea, #3a1b19);
+        --warn: light-dark(#7a4f00, #f0c36a);
+        --warn-bg: light-dark(#fff4d6, #36290d);
+        --ok: light-dark(#17633f, #7fd1a5);
+        --ok-bg: light-dark(#e3f4ea, #12301f);
+        --focus: light-dark(#1f4e79, #8fbbea);
+        --radius: 8px;
+        --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        --step--1: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+        --step-0: clamp(0.9375rem, 0.92rem + 0.1vw, 1rem);
+        --step-1: clamp(1.125rem, 1.05rem + 0.35vw, 1.25rem);
+        --step-2: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem);
+        --step-3: clamp(1.75rem, 1.4rem + 1.6vw, 2.5rem);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: var(--step-0) / 1.5 var(--font);
+      }
+      h1, h2, h3 { line-height: 1.25; margin: 0; font-weight: 650; }
+      p { margin: 0; }
+      .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+      :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+      .skip { position: absolute; inset-inline-start: 8px; inset-block-start: -100px; background: var(--primary); color: var(--primary-text); padding: 8px 12px; border-radius: 6px; }
+      .skip:focus { inset-block-start: 8px; z-index: 10; }
+
+      /* ---------- Botones: objetivo táctil de 44 px ---------- */
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        min-block-size: 44px; padding: 0 16px; border-radius: var(--radius);
+        border: 1px solid var(--border); background: var(--surface); color: var(--text);
+        font: inherit; font-weight: 600; cursor: pointer; text-decoration: none;
+      }
+      .btn:hover { background: var(--surface-2); }
+      .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+      .btn.primary:hover { filter: brightness(1.08); }
+      .btn.small { min-block-size: 36px; padding: 0 12px; font-size: var(--step--1); }
+
+      /* ---------- Cabecera de la aplicación ---------- */
+      .appbar { background: var(--surface); border-block-end: 1px solid var(--border); }
+      .appbar-in { max-inline-size: 1180px; margin-inline: auto; padding: 8px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; }
+      .brand { font-weight: 750; font-size: var(--step-1); letter-spacing: -0.01em; color: var(--primary); text-decoration: none; }
+      .brand span { color: var(--text); font-weight: 500; }
+      nav ul { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; margin: 0; padding: 0; }
+      nav a { display: inline-flex; align-items: center; min-block-size: 44px; padding: 0 12px; border-radius: var(--radius); color: var(--muted); text-decoration: none; font-weight: 550; }
+      nav a[aria-current='page'] { color: var(--text); background: var(--surface-2); box-shadow: inset 0 -3px 0 var(--primary); }
+      nav a:hover { color: var(--text); }
+      .spacer { flex: 1; }
+      .demo-banner { background: var(--warn-bg); color: var(--warn); border-block-end: 1px solid var(--border); }
+      .demo-banner p { max-inline-size: 1180px; margin-inline: auto; padding: 8px 16px; font-size: var(--step--1); font-weight: 550; }
+
+      main { max-inline-size: 1180px; margin-inline: auto; padding: 24px 16px 48px; display: grid; gap: 24px; }
+      .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+      .head p { color: var(--muted); margin-block-start: 4px; }
+
+      /* ---------- Resumen: tres cifras, sin adornos ---------- */
+      .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+      .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; }
+      .kpi h2 { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+      .kpi .value { font-size: var(--step-2); font-weight: 700; margin-block: 4px; }
+      .kpi .note { font-size: var(--step--1); color: var(--muted); }
+      .kpi.alert .value { color: var(--danger); }
+
+      /* ---------- Filtros ---------- */
+      .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+      .chip { min-block-size: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 550; cursor: pointer; }
+      .chip[aria-pressed='true'] { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+
+      /* ---------- Tabla: se apila en tarjetas cuando el contenedor es estrecho ---------- */
+      .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+      .table-wrapper { overflow: auto; max-inline-size: 100%; container-type: inline-size; border-radius: var(--radius); }
+      table { inline-size: 100%; border-collapse: separate; border-spacing: 0; }
+      caption { text-align: start; padding: 16px 20px; font-weight: 650; font-size: var(--step-1); }
+      caption small { display: block; font-weight: 400; color: var(--muted); font-size: var(--step--1); }
+      th, td { padding: 12px 16px; text-align: start; border-block-start: 1px solid var(--border); vertical-align: middle; }
+      thead th { font-size: var(--step--1); color: var(--muted); font-weight: 600; background: var(--surface-2); position: sticky; inset-block-start: 0; }
+      td.r, th.r { text-align: end; }
+      tbody th { font-weight: 600; }
+      tbody th small, td small { display: block; font-weight: 400; color: var(--muted); font-size: var(--step--1); }
+      .badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: var(--step--1); font-weight: 650; }
+      .badge.overdue { background: var(--danger-bg); color: var(--danger); }
+      .badge.soon { background: var(--warn-bg); color: var(--warn); }
+      .badge.ok { background: var(--ok-bg); color: var(--ok); }
+      .badge::before { content: attr(data-icon); } /* el estado nunca depende solo del color */
+      @container (width < 760px) {
+        table, thead, tbody, tr, th, td { display: block; }
+        thead { display: none; }
+        tr { border-block-start: 1px solid var(--border); padding: 12px 16px; display: grid; gap: 6px; }
+        th, td { border: 0; padding: 0; }
+        td.r { text-align: start; }
+        caption { display: block; inline-size: 100%; }
+        td[data-label]::before { content: attr(data-label) ': ' / attr(data-label); color: var(--muted); font-weight: 500; }
+      }
+
+      /* ---------- Estados de carga, vacío y error ---------- */
+      .states { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+      .state { padding: 20px; display: grid; gap: 12px; align-content: start; }
+      .state h3 { font-size: var(--step-1); }
+      .state p { color: var(--muted); }
+      .skeleton { block-size: 14px; border-radius: 4px; background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; }
+      @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+      @keyframes shimmer { to { background-position: -200% 0; } }
+      .state.error { border-color: var(--danger); }
+
+      /* ---------- Hoja de propuesta (fuera del producto) ---------- */
+      .doc { max-inline-size: 1180px; margin-inline: auto; padding: 32px 16px; display: grid; gap: 16px; }
+      .doc h1 { font-size: var(--step-3); }
+      .doc > p { color: var(--muted); max-inline-size: 70ch; }
+      .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+      .sw { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); font-size: var(--step--1); }
+      .sw i { display: block; block-size: 48px; }
+      .sw div { padding: 8px 10px; }
+      .sw b { display: block; }
+      .sw code { color: var(--muted); }
+      .divider { margin-block: 32px 0; padding-block: 16px; border-block-start: 2px dashed var(--border); color: var(--muted); font-size: var(--step--1); text-align: center; }
+      .specimen { display: grid; gap: 4px; padding: 16px; }
+      .legal { text-align: center; color: var(--muted); font-size: var(--step--1); padding: 24px 16px 40px; }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#contenido">Saltar al contenido</a>
+
+    <!-- ============ PROPUESTA ============ -->
+    <section class="doc" aria-labelledby="prop-title">
+      <h1 id="prop-title">Reclama · propuesta de diseño</h1>
+      <p>
+        Sobrio, claro y profesional: una herramienta de trabajo para autónomos, no una página de marketing. Azul tinta
+        como único color de marca; rojo, ámbar y verde solo para estados, siempre acompañados de icono y texto. Modo
+        claro y oscuro automáticos según el sistema. Todos los datos de abajo son ficticios.
+      </p>
+
+      <h2>Paleta (modo claro / modo oscuro)</h2>
+      <div class="swatches">
+        <div class="sw"><i style="background: var(--primary)"></i><div><b>Primario · azul tinta</b><code>#1F4E79 / #8FBBEA</code></div></div>
+        <div class="sw"><i style="background: var(--text)"></i><div><b>Texto</b><code>#1A2330 / #E8ECF2</code></div></div>
+        <div class="sw"><i style="background: var(--muted)"></i><div><b>Texto secundario</b><code>#475366 / #A9B4C4</code></div></div>
+        <div class="sw"><i style="background: var(--surface-2)"></i><div><b>Superficie 2</b><code>#EEF1F5 / #1D2631</code></div></div>
+        <div class="sw"><i style="background: var(--border)"></i><div><b>Borde</b><code>#D5DBE3 / #2C3745</code></div></div>
+        <div class="sw"><i style="background: var(--danger)"></i><div><b>Vencida · rojo</b><code>#B42318 / #FF9A90</code></div></div>
+        <div class="sw"><i style="background: var(--warn)"></i><div><b>Por vencer · ámbar</b><code>#7A4F00 / #F0C36A</code></div></div>
+        <div class="sw"><i style="background: var(--ok)"></i><div><b>Al día · verde</b><code>#17633F / #7FD1A5</code></div></div>
+      </div>
+      <p>
+        Contraste calculado: texto sobre fondo 15:1, texto secundario 7:1 y los colores de estado sobre su fondo, más
+        de 5,5:1 (mínimo exigido AA: 4,5:1). Se medirá de nuevo con Lighthouse al construirlo.
+      </p>
+
+      <h2>Tipografía</h2>
+      <div class="card specimen">
+        <h3 style="font-size: var(--step-2)">Fuente del sistema: Segoe UI, SF, Roboto…</h3>
+        <p>Cuerpo 16 px, interlineado 1,5. Títulos en peso 650; escala fluida de 5 tamaños.</p>
+        <p class="num" style="font-size: var(--step-1); font-weight: 650">12.629,84 € · 1.048,55 € · 8,55 €</p>
+        <p style="color: var(--muted); font-size: var(--step--1)">
+          Cifras tabulares: los importes se alinean a la derecha y las columnas cuadran. Sin descargar fuentes: cero
+          peticiones externas, sin saltos de maquetación y sin dependencia nueva. Alternativa: Inter autoalojada
+          (más identidad, +1 dependencia y ~100 kB).
+        </p>
+      </div>
+
+      <h2>Principios</h2>
+      <p>
+        Responsive desde 320 px (la tabla se apila en tarjetas) · teclado completo y foco visible · objetivos táctiles de
+        44 px · estados de carga, vacío y error cuidados (abajo) · sin animaciones salvo el esqueleto de carga, que se
+        apaga con «reducir movimiento» · aviso legal visible: «no es asesoría legal».
+      </p>
+    </section>
+
+    <div class="divider" role="presentation">▼ Boceto del panel (los datos son ficticios) ▼</div>
+
+    <!-- ============ BOCETO DEL PANEL ============ -->
+    <div class="demo-banner">
+      <p>Modo demo: todos los datos son ficticios y esta sesión caduca en 1 h 52 min. <a href="#" style="color: inherit">Crear mi cuenta</a></p>
+    </div>
+    <header class="appbar">
+      <div class="appbar-in">
+        <a class="brand" href="#">Reclama<span> · cobros</span></a>
+        <nav aria-label="Principal">
+          <ul>
+            <li><a href="#" aria-current="page">Panel</a></li>
+            <li><a href="#">Importar CSV</a></li>
+            <li><a href="#">Reclamaciones</a></li>
+            <li><a href="#">Perfil</a></li>
+          </ul>
+        </nav>
+        <span class="spacer"></span>
+        <button class="btn small" type="button">Salir</button>
+      </div>
+    </header>
+
+    <main id="contenido">
+      <div class="head">
+        <div>
+          <h1 style="font-size: var(--step-3)">Panel</h1>
+          <p>Cálculo a 19/10/2026 con los tipos de demora del BOE (10,40 % este semestre).</p>
+        </div>
+        <a class="btn primary" href="#">Importar facturas</a>
+      </div>
+
+      <section class="kpis" aria-label="Resumen">
+        <div class="kpi"><h2>Pendiente de cobro</h2><p class="value num">38.412,60 €</p><p class="note">14 facturas abiertas</p></div>
+        <div class="kpi alert"><h2>Intereses de demora</h2><p class="value num">1.904,37 €</p><p class="note">más 40 € de compensación por reclamación</p></div>
+        <div class="kpi"><h2>Facturas vencidas</h2><p class="value num">9</p><p class="note">3 todavía no vencen</p></div>
+      </section>
+
+      <section aria-labelledby="filtros">
+        <h2 id="filtros" class="visually" style="position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip:rect(0 0 0 0)">Filtrar facturas</h2>
+        <div class="filters" role="group" aria-label="Filtrar por estado">
+          <button class="chip" type="button" aria-pressed="true">Todas (14)</button>
+          <button class="chip" type="button" aria-pressed="false">Vencidas (9)</button>
+          <button class="chip" type="button" aria-pressed="false">No vencidas (3)</button>
+          <button class="chip" type="button" aria-pressed="false">Cobro parcial (1)</button>
+        </div>
+      </section>
+
+      <div class="card">
+        <div class="table-wrapper">
+          <table>
+            <caption>
+              Facturas
+              <small>Ordenadas por días de retraso. Importes en euros.</small>
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Factura</th>
+                <th scope="col">Vencimiento</th>
+                <th scope="col">Estado</th>
+                <th scope="col" class="r">Pendiente</th>
+                <th scope="col" class="r">Intereses</th>
+                <th scope="col"><span class="visually" style="position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip:rect(0 0 0 0)">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">F-2025-014<small>Construcciones Muestra S.A.</small></th>
+                <td data-label="Vencimiento" class="num">12/09/2025<small>402 días de retraso</small></td>
+                <td data-label="Estado"><span class="badge overdue" data-icon="⚠">Vencida</span></td>
+                <td data-label="Pendiente" class="r num">8.940,00 €</td>
+                <td data-label="Intereses" class="r num">1.011,92 €</td>
+                <td><a class="btn small" href="#">Ver desglose</a></td>
+              </tr>
+              <tr>
+                <th scope="row">F-2026-003<small>Talleres Ejemplo S.L.</small></th>
+                <td data-label="Vencimiento" class="num">23/03/2026<small>210 días de retraso</small></td>
+                <td data-label="Estado"><span class="badge overdue" data-icon="⚠">Vencida</span></td>
+                <td data-label="Pendiente" class="r num">3.512,40 €</td>
+                <td data-label="Intereses" class="r num">212,06 €</td>
+                <td><a class="btn small" href="#">Ver desglose</a></td>
+              </tr>
+              <tr>
+                <th scope="row">F-2026-007<small>Panadería Ficticia S.L.</small></th>
+                <td data-label="Vencimiento" class="num">11/07/2026<small>100 días · cobro parcial de 400 €</small></td>
+                <td data-label="Estado"><span class="badge overdue" data-icon="⚠">Vencida</span></td>
+                <td data-label="Pendiente" class="r num">600,00 €</td>
+                <td data-label="Intereses" class="r num">17,10 €</td>
+                <td><a class="btn small" href="#">Ver desglose</a></td>
+              </tr>
+              <tr>
+                <th scope="row">F-2026-011<small>Logística Prueba S.L.</small></th>
+                <td data-label="Vencimiento" class="num">05/11/2026<small>vence en 17 días</small></td>
+                <td data-label="Estado"><span class="badge soon" data-icon="◷">Por vencer</span></td>
+                <td data-label="Pendiente" class="r num">5.600,00 €</td>
+                <td data-label="Intereses" class="r num">0,00 €</td>
+                <td><a class="btn small" href="#">Ver desglose</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <h2 style="font-size: var(--step-1)">Otros estados de la pantalla</h2>
+      <div class="states">
+        <div class="card state" aria-busy="true">
+          <h3>Cargando</h3>
+          <div class="skeleton" style="inline-size: 70%"></div>
+          <div class="skeleton"></div>
+          <div class="skeleton" style="inline-size: 85%"></div>
+        </div>
+        <div class="card state">
+          <h3>Vacío</h3>
+          <p>Aún no hay facturas. Importa tu CSV de Excel o prueba con los datos de ejemplo.</p>
+          <div><a class="btn primary" href="#">Importar CSV</a></div>
+        </div>
+        <div class="card state error" role="alert">
+          <h3>Error</h3>
+          <p>No hemos podido cargar las facturas. Tus datos están a salvo; vuelve a intentarlo en unos segundos.</p>
+          <div><button class="btn" type="button">Reintentar</button></div>
+        </div>
+      </div>
+    </main>
+
+    <p class="legal">
+      Reclama es una herramienta de ayuda al cobro, no asesoría legal. Los tipos de interés proceden del BOE.
+    </p>
+  </body>
+</html>

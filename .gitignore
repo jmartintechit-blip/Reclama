@@ -22,3 +22,6 @@ docs/DECISIONS-LOG.md
 docs/DEFEND.md
 docs/HANDOFF.md
 docs/CHECKPOINTS.md
+
+# The web build (Vite output)
+web/dist/

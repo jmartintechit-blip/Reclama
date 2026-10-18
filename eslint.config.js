@@ -1,5 +1,7 @@
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
+import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
@@ -56,6 +58,36 @@ export default defineConfig(
           selector: "NewExpression[callee.name='Date'][arguments.length=0]",
           message:
             'new Date() reads the clock; receive a `clock` argument instead.',
+        },
+      ],
+    },
+  },
+  {
+    // The browser app: hooks rules, accessibility rules, and no float parsing or formatting for
+    // money (the clock ban above is server-only; the web reads dates it is given).
+    files: ['web/**/*.{ts,tsx}'],
+    extends: [
+      reactHooks.configs.flat.recommended,
+      jsxA11y.flatConfigs.recommended,
+    ],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'parseFloat',
+          message: 'Money is integer cents; do not parse amounts as floats.',
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Number',
+          property: 'parseFloat',
+          message: 'Money is integer cents; do not parse amounts as floats.',
+        },
+        {
+          property: 'toFixed',
+          message: 'toFixed rounds binary floats; format cents with formatEUR.',
         },
       ],
     },

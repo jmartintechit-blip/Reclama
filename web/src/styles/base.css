@@ -1,0 +1,76 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: var(--s-0) / 1.55 var(--font);
+}
+
+h1,
+h2,
+h3,
+p,
+ol,
+ul,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+a {
+  color: inherit;
+}
+
+/* Every amount is monospaced with tabular digits so columns of figures line up. */
+.mono,
+.amt {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* <main> only receives focus from the code, after a route change: it is not a control. */
+main:focus {
+  outline: none;
+}
+
+.skip {
+  position: absolute;
+  inset-inline-start: 8px;
+  inset-block-start: -100px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 10px 14px;
+  border-radius: 6px;
+  z-index: 10;
+}
+
+.skip:focus {
+  inset-block-start: 8px;
+}
+
+.wrap {
+  max-inline-size: 1120px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
