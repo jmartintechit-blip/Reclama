@@ -2,11 +2,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   debtorMatchKey,
   findOrCreateDebtor,
+  countDebtors,
   getDebtor,
+  getDebtorWithStats,
   listDebtors,
+  listDebtorsWithStats,
   updateDebtor,
 } from './debtors.ts';
-import { newUser } from './test-fixtures.ts';
+import { toCents } from '../domain/money.ts';
+import { createInvoice, setInvoiceStatus } from './invoices.ts';
+import { addPayment } from './payments.ts';
+import { date, newUser } from './test-fixtures.ts';
 import { createTestDb, type TestDb } from './test-db.ts';
 
 const MISSING_ID = '00000000-0000-4000-8000-000000000000';
@@ -264,5 +270,73 @@ describe('updateDebtor', () => {
       await updateDebtor(db, a, MISSING_ID, { kind: 'BUSINESS' }),
     ).toBeNull();
     expect(await getDebtor(db, a, debtor.id)).toEqual(debtor);
+  });
+});
+
+describe('findOrCreateDebtor with an e-mail', () => {
+  it('stores the e-mail of a new debtor and never overwrites the one of an existing debtor', async () => {
+    const userId = await newUser(db);
+
+    const created = await findOrCreateDebtor(db, userId, {
+      name: 'Mail Co',
+      email: 'first@example.com',
+    });
+    const again = await findOrCreateDebtor(db, userId, {
+      name: 'MAIL CO',
+      email: 'second@example.com',
+    });
+
+    expect(created.email).toBe('first@example.com');
+    expect(again).toEqual(created);
+  });
+});
+
+describe('debtors with statistics', () => {
+  it('counts invoices and sums what is still owed on the invoices that are not PAID', async () => {
+    const userId = await newUser(db);
+    const other = await newUser(db);
+    const acme = await findOrCreateDebtor(db, userId, { name: 'Acme' });
+    const empty = await findOrCreateDebtor(db, userId, { name: 'Zed' });
+    await findOrCreateDebtor(db, other, { name: 'Acme' });
+    const make = (number: string, cents: number) =>
+      createInvoice(db, userId, {
+        debtor_id: acme.id,
+        number,
+        issue_date: date('2026-01-01'),
+        amount_cents: toCents(cents),
+      });
+    const one = await make('F-1', 100_000);
+    await make('F-2', 50_000);
+    const settled = await make('F-3', 20_000);
+    await addPayment(db, userId, one.id, {
+      paid_on: date('2026-02-01'),
+      amount_cents: toCents(30_000),
+    });
+    await setInvoiceStatus(db, userId, settled.id, 'PAID');
+
+    const list = await listDebtorsWithStats(db, userId);
+
+    expect(list).toEqual([
+      {
+        ...acme,
+        invoice_count: 3,
+        open_invoice_count: 2,
+        outstanding_cents: 120_000,
+      },
+      {
+        ...empty,
+        invoice_count: 0,
+        open_invoice_count: 0,
+        outstanding_cents: 0,
+      },
+    ]);
+    expect(await getDebtorWithStats(db, userId, acme.id)).toEqual(list[0]);
+    expect(await getDebtorWithStats(db, other, acme.id)).toBeNull();
+    expect(await countDebtors(db, userId)).toBe(2);
+    expect(
+      (await listDebtorsWithStats(db, userId, { limit: 1, offset: 1 })).map(
+        (debtor) => debtor.name,
+      ),
+    ).toEqual(['Zed']);
   });
 });

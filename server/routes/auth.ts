@@ -24,7 +24,7 @@ import { sendError } from '../middleware/errors.ts';
 // database check `email = lower(email)` must agree with JavaScript's toLowerCase(), and for
 // non-ASCII letters the two can differ. The shape is "something@label.label" with a linear
 // regex (no nested repeats), so a long input cannot make it slow.
-const email = z
+export const email = z
   .string()
   .trim()
   .toLowerCase()

@@ -110,7 +110,7 @@ describe('createApp', () => {
 });
 
 describe('the route registry of createApp', () => {
-  it('lists every route with its auth, and only health and the auth entry points are public', () => {
+  it('lists every route with its auth, and only health, the auth entry points and the rates are public', () => {
     expect(getRegisteredRoutes(createApp())).toEqual([
       { method: 'GET', path: '/api/health', auth: 'public' },
       { method: 'GET', path: '/api/health/ready', auth: 'public' },
@@ -121,6 +121,17 @@ describe('the route registry of createApp', () => {
       { method: 'PATCH', path: '/api/me/profile', auth: 'session' },
       { method: 'DELETE', path: '/api/me', auth: 'session' },
       { method: 'POST', path: '/api/imports', auth: 'session' },
+      { method: 'GET', path: '/api/rates', auth: 'public' },
+      { method: 'GET', path: '/api/debtors', auth: 'session' },
+      { method: 'GET', path: '/api/debtors/:id', auth: 'session' },
+      { method: 'PATCH', path: '/api/debtors/:id', auth: 'session' },
+      { method: 'GET', path: '/api/invoices', auth: 'session' },
+      { method: 'POST', path: '/api/invoices', auth: 'session' },
+      { method: 'GET', path: '/api/invoices/:id', auth: 'session' },
+      { method: 'PATCH', path: '/api/invoices/:id', auth: 'session' },
+      { method: 'DELETE', path: '/api/invoices/:id', auth: 'session' },
+      { method: 'POST', path: '/api/invoices/:id/payments', auth: 'session' },
+      { method: 'GET', path: '/api/invoices/:id/interest', auth: 'session' },
     ]);
   });
 
@@ -128,8 +139,8 @@ describe('the route registry of createApp', () => {
     const first = createApp();
     const second = createApp();
 
-    expect(getRegisteredRoutes(first)).toHaveLength(9);
-    expect(getRegisteredRoutes(second)).toHaveLength(9);
+    expect(getRegisteredRoutes(first)).toHaveLength(20);
+    expect(getRegisteredRoutes(second)).toHaveLength(20);
   });
 });
 

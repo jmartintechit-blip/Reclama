@@ -14,6 +14,12 @@ export function sendError(
   });
 }
 
+// The one answer for "no such thing": a missing row, a malformed id and another user's row all
+// look the same, so the response never tells whether something exists.
+export function sendNotFound(res: Response): void {
+  sendError(res, 404, 'NOT_FOUND', 'Not found');
+}
+
 export const notFoundHandler: RequestHandler = (_req, res) => {
   sendError(res, 404, 'NOT_FOUND', 'Not found');
 };

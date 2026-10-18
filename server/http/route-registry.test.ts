@@ -9,6 +9,7 @@ import { getRegisteredRoutes, type RegisteredRoute } from './routes.ts';
 const PUBLIC_ROUTES = [
   'GET /api/health',
   'GET /api/health/ready',
+  'GET /api/rates',
   'POST /api/auth/login',
   'POST /api/auth/register',
 ];

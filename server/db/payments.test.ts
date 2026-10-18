@@ -2,8 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { toCents } from '../domain/money.ts';
 import { findOrCreateDebtor } from './debtors.ts';
 import { PaymentExceedsBalanceError } from './errors.ts';
-import { createInvoice } from './invoices.ts';
-import { addPayment, listPayments } from './payments.ts';
+import { createInvoice, getInvoice } from './invoices.ts';
+import {
+  addPayment,
+  listPayments,
+  listPaymentsForInvoices,
+} from './payments.ts';
 import { createTestDb, type TestDb } from './test-db.ts';
 import { date, newUser } from './test-fixtures.ts';
 
@@ -165,5 +169,64 @@ describe('listPayments', () => {
     expect(await listPayments(db, b, invoice.id)).toEqual([]);
     expect(await listPayments(db, userId, MISSING_ID)).toEqual([]);
     expect(await listPayments(db, userId, invoice.id)).toHaveLength(1);
+  });
+});
+
+describe('addPayment and the PAID status', () => {
+  it('sets the invoice to PAID only when the payment brings the balance to zero', async () => {
+    const { userId, invoice } = await setup();
+
+    await addPayment(db, userId, invoice.id, pay(40_000));
+    expect((await getInvoice(db, userId, invoice.id))?.status).toBe('OPEN');
+
+    await addPayment(db, userId, invoice.id, pay(60_000));
+    expect((await getInvoice(db, userId, invoice.id))?.status).toBe('PAID');
+  });
+
+  it('does not touch the status when the payment is refused, nor the invoice of another user', async () => {
+    const { userId, invoice } = await setup();
+    const other = await setup();
+
+    await expect(
+      addPayment(db, userId, invoice.id, pay(100_001)),
+    ).rejects.toBeInstanceOf(PaymentExceedsBalanceError);
+    expect(
+      await addPayment(db, userId, other.invoice.id, pay(100_000)),
+    ).toBeNull();
+
+    expect((await getInvoice(db, userId, invoice.id))?.status).toBe('OPEN');
+    expect((await getInvoice(db, other.userId, other.invoice.id))?.status).toBe(
+      'OPEN',
+    );
+    expect(await listPayments(db, other.userId, other.invoice.id)).toEqual([]);
+  });
+});
+
+describe('listPaymentsForInvoices', () => {
+  it('returns the payments of several invoices in one query, oldest first, and ignores ids of other users', async () => {
+    const { userId, invoice } = await setup();
+    const second = await createInvoice(db, userId, {
+      debtor_id: invoice.debtor_id,
+      number: 'F-2',
+      issue_date: date('2026-01-10'),
+      amount_cents: toCents(50_000),
+    });
+    const stranger = await setup();
+    await addPayment(db, userId, invoice.id, pay(1_000, '2026-03-01'));
+    await addPayment(db, userId, second.id, pay(2_000, '2026-02-01'));
+    await addPayment(db, stranger.userId, stranger.invoice.id, pay(3_000));
+
+    const payments = await listPaymentsForInvoices(db, userId, [
+      invoice.id,
+      second.id,
+      stranger.invoice.id,
+      MISSING_ID,
+    ]);
+
+    expect(payments.map((p) => [p.invoice_id, p.amount_cents])).toEqual([
+      [second.id, 2_000],
+      [invoice.id, 1_000],
+    ]);
+    expect(await listPaymentsForInvoices(db, userId, [])).toEqual([]);
   });
 });

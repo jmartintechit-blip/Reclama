@@ -2,11 +2,14 @@ import type { ISODate } from '../domain/dates.ts';
 import type { Cents } from '../domain/money.ts';
 import type { Db } from './client.ts';
 import {
+  CHECK_VIOLATION,
   CLAIM_INVOICE_FK,
   DebtorNotFoundError,
   FOREIGN_KEY_VIOLATION,
+  INVOICE_DATES_CHECK,
   INVOICE_DEBTOR_FK,
   INVOICE_NUMBER_UNIQUE,
+  InvoiceDatesError,
   InvoiceDuplicateError,
   InvoiceInClaimError,
   UNIQUE_VIOLATION,
@@ -90,23 +93,67 @@ export async function createInvoice(
     if (violates(error, UNIQUE_VIOLATION, INVOICE_NUMBER_UNIQUE)) {
       throw new InvoiceDuplicateError();
     }
+    if (violates(error, CHECK_VIOLATION, INVOICE_DATES_CHECK)) {
+      throw new InvoiceDatesError();
+    }
     throw error;
   }
 }
+
+export interface InvoiceFilter {
+  status?: InvoiceStatus;
+  debtor_id?: string;
+}
+
+// A filter that is left out matches everything of the user. `debtor_id` of another user simply
+// matches nothing: the user_id condition is always there.
+const FILTER_WHERE = `user_id = $1 and ($2::text is null or status = $2)
+  and ($3::uuid is null or debtor_id = $3)`;
+const filterParams = (userId: string, filter: InvoiceFilter) => [
+  userId,
+  filter.status ?? null,
+  filter.debtor_id ?? null,
+];
+const LIST_ORDER = 'order by issue_date desc, number desc, id';
 
 // Newest issue date first. The page size is always bounded (see normalizePage).
 export async function listInvoices(
   db: Db,
   userId: string,
-  filter: { status?: InvoiceStatus } & Page = {},
+  filter: InvoiceFilter & Page = {},
 ): Promise<Invoice[]> {
   const { limit, offset } = normalizePage(filter);
   const { rows } = await db.query(
-    `select ${COLUMNS} from invoices
-      where user_id = $1 and ($2::text is null or status = $2)
-      order by issue_date desc, number desc, id
-      limit $3 offset $4`,
-    [userId, filter.status ?? null, limit, offset],
+    `select ${COLUMNS} from invoices where ${FILTER_WHERE}
+      ${LIST_ORDER} limit $4 offset $5`,
+    [...filterParams(userId, filter), limit, offset],
+  );
+  return rows as Invoice[];
+}
+
+export async function countInvoices(
+  db: Db,
+  userId: string,
+  filter: InvoiceFilter = {},
+): Promise<number> {
+  const { rows } = await db.query(
+    `select count(*)::int as n from invoices where ${FILTER_WHERE}`,
+    filterParams(userId, filter),
+  );
+  return (rows[0] as { n: number }).n;
+}
+
+// The first `max` matching invoices, same order as listInvoices, for the totals of a list. The
+// caller chooses the cap (it is a number written in the code, never user input).
+export async function listInvoicesUpTo(
+  db: Db,
+  userId: string,
+  filter: InvoiceFilter,
+  max: number,
+): Promise<Invoice[]> {
+  const { rows } = await db.query(
+    `select ${COLUMNS} from invoices where ${FILTER_WHERE} ${LIST_ORDER} limit $4`,
+    [...filterParams(userId, filter), max],
   );
   return rows as Invoice[];
 }
@@ -151,6 +198,9 @@ export async function updateInvoice(
   } catch (error) {
     if (violates(error, UNIQUE_VIOLATION, INVOICE_NUMBER_UNIQUE)) {
       throw new InvoiceDuplicateError();
+    }
+    if (violates(error, CHECK_VIOLATION, INVOICE_DATES_CHECK)) {
+      throw new InvoiceDatesError();
     }
     throw error;
   }

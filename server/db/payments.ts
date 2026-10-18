@@ -35,6 +35,9 @@ const REMAINING = `i.amount_cents - coalesce(
 // they can still exceed it; closing that gap needs a row lock inside a transaction (or a
 // database trigger), which this interface cannot express.
 //
+// A payment that brings the balance to zero also sets the invoice to PAID, in the SAME statement
+// (the second CTE sees the balance as it was before the insert, hence "= the amount").
+//
 // Returns null when the invoice does not exist or is not the user's; throws
 // PaymentExceedsBalanceError (with the balance left) when the amount is too high.
 export async function addPayment(
@@ -44,11 +47,19 @@ export async function addPayment(
   { paid_on, amount_cents }: NewPayment,
 ): Promise<Payment | null> {
   const { rows } = await db.query(
-    `insert into payments (user_id, invoice_id, paid_on, amount_cents)
-     select i.user_id, i.id, $3::date, $4::bigint
-       from invoices i
-      where i.user_id = $1 and i.id = $2 and ${REMAINING} >= $4::bigint
-     returning ${COLUMNS}`,
+    `with inserted as (
+       insert into payments (user_id, invoice_id, paid_on, amount_cents)
+       select i.user_id, i.id, $3::date, $4::bigint
+         from invoices i
+        where i.user_id = $1 and i.id = $2 and ${REMAINING} >= $4::bigint
+       returning ${COLUMNS}
+     ), settled as (
+       update invoices i set status = 'PAID'
+        where i.user_id = $1 and i.id = $2 and exists (select 1 from inserted)
+          and ${REMAINING} = $4::bigint
+       returning i.id
+     )
+     select ${COLUMNS} from inserted`,
     [userId, invoiceId, paid_on, amount_cents],
   );
   if (rows[0]) return rows[0] as Payment;
@@ -76,6 +87,22 @@ export async function listPayments(
       where user_id = $1 and invoice_id = $2
       order by paid_on, id`,
     [userId, invoiceId],
+  );
+  return rows as Payment[];
+}
+
+// The payments of many invoices in ONE query, for lists. Another user's invoice id in the array
+// matches nothing (user_id is in the condition). Same order as listPayments.
+export async function listPaymentsForInvoices(
+  db: Db,
+  userId: string,
+  invoiceIds: readonly string[],
+): Promise<Payment[]> {
+  const { rows } = await db.query(
+    `select ${COLUMNS} from payments
+      where user_id = $1 and invoice_id = any($2::uuid[])
+      order by paid_on, id`,
+    [userId, invoiceIds],
   );
   return rows as Payment[];
 }

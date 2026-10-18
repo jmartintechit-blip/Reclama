@@ -6,14 +6,17 @@ import {
   CLAIM_INVOICE_FK,
   DebtorNotFoundError,
   FOREIGN_KEY_VIOLATION,
+  InvoiceDatesError,
   InvoiceDuplicateError,
   InvoiceInClaimError,
 } from './errors.ts';
 import {
+  countInvoices,
   createInvoice,
   deleteInvoice,
   getInvoice,
   listInvoices,
+  listInvoicesUpTo,
   setInvoiceStatus,
   updateInvoice,
   type NewInvoice,
@@ -428,5 +431,65 @@ describe('deleteInvoice', () => {
     await expect(deleteInvoice(failing, MISSING_ID, MISSING_ID)).rejects.toBe(
       other,
     );
+  });
+});
+
+describe('the due date CHECK', () => {
+  it('maps the database CHECK to InvoiceDatesError on create and on update, writing nothing', async () => {
+    const { userId, debtor, invoice } = await setup();
+
+    await expect(
+      createInvoice(
+        db,
+        userId,
+        invoiceData(debtor, {
+          number: 'F-2',
+          issue_date: date('2026-03-01'),
+          due_date: date('2026-02-01'),
+        }),
+      ),
+    ).rejects.toBeInstanceOf(InvoiceDatesError);
+    await expect(
+      updateInvoice(db, userId, invoice.id, { due_date: date('2026-01-01') }),
+    ).rejects.toBeInstanceOf(InvoiceDatesError);
+
+    expect(await getInvoice(db, userId, invoice.id)).toEqual(invoice);
+    expect(await countInvoices(db, userId)).toBe(1);
+  });
+});
+
+describe('listing with a debtor filter', () => {
+  it('filters by debtor and status, counts the same rows and caps the totals list', async () => {
+    const userId = await newUser(db);
+    const other = await newUser(db);
+    const acme = await findOrCreateDebtor(db, userId, { name: 'Acme' });
+    const beta = await findOrCreateDebtor(db, userId, { name: 'Beta' });
+    const first = await createInvoice(
+      db,
+      userId,
+      invoiceData(acme, { number: 'A-1' }),
+    );
+    await createInvoice(db, userId, invoiceData(acme, { number: 'A-2' }));
+    await createInvoice(db, userId, invoiceData(beta, { number: 'B-1' }));
+    await setInvoiceStatus(db, userId, first.id, 'PAID');
+
+    expect(await countInvoices(db, userId)).toBe(3);
+    expect(await countInvoices(db, userId, { debtor_id: acme.id })).toBe(2);
+    expect(
+      await countInvoices(db, userId, { debtor_id: acme.id, status: 'OPEN' }),
+    ).toBe(1);
+    expect(
+      (await listInvoices(db, userId, { debtor_id: beta.id })).map(
+        (invoice) => invoice.number,
+      ),
+    ).toEqual(['B-1']);
+    expect(await listInvoicesUpTo(db, userId, {}, 2)).toHaveLength(2);
+    expect(await listInvoicesUpTo(db, userId, {}, 10)).toHaveLength(3);
+
+    // A debtor of another user matches nothing, whatever the filter.
+    expect(await countInvoices(db, other, { debtor_id: acme.id })).toBe(0);
+    expect(
+      await listInvoicesUpTo(db, other, { debtor_id: acme.id }, 10),
+    ).toEqual([]);
   });
 });

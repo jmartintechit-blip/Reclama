@@ -10,13 +10,16 @@ import { hitRateLimit } from './db/rate-limits.ts';
 import type { Clock } from './domain/dates.ts';
 import { createRouteRegistry } from './http/routes.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerDebtorRoutes } from './routes/debtors.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import {
   IMPORT_BODY_LIMIT_BYTES,
   IMPORTS_PATH,
   registerImportRoutes,
 } from './routes/imports.ts';
+import { registerInvoiceRoutes } from './routes/invoices.ts';
 import { registerMeRoutes } from './routes/me.ts';
+import { registerRateRoutes } from './routes/rates.ts';
 
 // Without a database the app still starts (liveness must work); every query then fails.
 const noDb: Db = {
@@ -60,6 +63,9 @@ export function createApp({
   registerAuthRoutes(defineRoute, { db: sessionDb, clock });
   registerMeRoutes(defineRoute, { db: sessionDb });
   registerImportRoutes(defineRoute, { db: sessionDb });
+  registerRateRoutes(defineRoute, { db: sessionDb });
+  registerDebtorRoutes(defineRoute, { db: sessionDb });
+  registerInvoiceRoutes(defineRoute, { db: sessionDb, clock });
 
   // After all the routes: the not-found handler catches what no route matched,
   // and the error handler must be the last middleware to receive every error.

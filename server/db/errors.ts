@@ -27,6 +27,16 @@ export class InvoiceInClaimError extends Error {
   }
 }
 
+// The database CHECK (due date on or after the issue date). The API validates it first; this is
+// the backstop for a request that slips past (two edits racing, a code path that forgets).
+export class InvoiceDatesError extends Error {
+  readonly code = 'DUE_BEFORE_ISSUE';
+  constructor() {
+    super('The due date is before the issue date');
+    this.name = 'InvoiceDatesError';
+  }
+}
+
 export class PaymentExceedsBalanceError extends Error {
   readonly code = 'PAYMENT_EXCEEDS_BALANCE';
   readonly remainingCents: Cents;
@@ -41,8 +51,10 @@ export class PaymentExceedsBalanceError extends Error {
 // violated constraint in `error.constraint`.
 export const UNIQUE_VIOLATION = '23505';
 export const FOREIGN_KEY_VIOLATION = '23503';
+export const CHECK_VIOLATION = '23514';
 
 // Default names Postgres gives to the constraints of the initial schema (the tests check them).
+export const INVOICE_DATES_CHECK = 'invoices_check';
 export const INVOICE_DEBTOR_FK = 'invoices_user_id_debtor_id_fkey';
 export const INVOICE_NUMBER_UNIQUE = 'invoices_user_id_debtor_id_number_key';
 export const CLAIM_INVOICE_FK = 'claim_invoices_user_id_invoice_id_fkey';
