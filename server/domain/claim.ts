@@ -77,12 +77,14 @@ export class ClaimError extends Error {
 const sum = (values: readonly number[]): Cents =>
   toCents(values.reduce((total, value) => total + value, 0));
 
-// Checked before any interest work: Ley 3/2004 only covers business-to-business debts.
+// Checked before any interest work. Ley 3/2004 excludes consumers; it does apply to debts with a
+// public administration, but those follow public-procurement rules and a different court route,
+// which Reclama does not guide, so they are refused too.
 function assertB2b(debtorKind: DebtorKind, b2bConfirmed: boolean): void {
   if (debtorKind === 'PUBLIC_ADMIN' || debtorKind === 'CONSUMER') {
     throw new ClaimError(
       'DEBTOR_NOT_B2B',
-      'Ley 3/2004 does not cover public administrations or consumers',
+      'Reclama only handles debts of businesses: Ley 3/2004 does not cover consumers, and public administrations follow their own rules',
     );
   }
   if (debtorKind === 'UNKNOWN' && !b2bConfirmed) {

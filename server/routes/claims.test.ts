@@ -34,6 +34,22 @@ interface SegmentJson {
   balance_cents: number;
   interest_cents: number;
 }
+interface NextActionJson {
+  action: string;
+  reason: string;
+  earliest_on: string | null;
+  wait_days: number;
+  warnings: { code: string; message: string }[];
+  guide: {
+    title: string;
+    why: string;
+    steps: string[];
+    prepare: string[];
+    outcomes: string[];
+    notes: string[];
+    template: { text: string; placeholders: string[] } | null;
+  };
+}
 interface ClaimJson {
   id: string;
   debtor_id: string;
@@ -58,10 +74,15 @@ interface ClaimJson {
     occurred_on: string;
     note: string | null;
   }[];
+  next_action?: NextActionJson; // only on GET /api/claims/:id
 }
-interface ClaimListItem extends Omit<ClaimJson, 'lines' | 'events'> {
+interface ClaimListItem extends Omit<
+  ClaimJson,
+  'lines' | 'events' | 'next_action'
+> {
   invoice_count: number;
   last_event: { kind: string; occurred_on: string } | null;
+  next_action: { action: string; earliest_on: string | null };
 }
 const claimOf = (res: Answer) =>
   (res.json as { data: { claim: ClaimJson } }).data.claim;
@@ -732,7 +753,15 @@ describe('GET /api/claims', () => {
       last_event: null,
     });
     expect(body.claims[0]).not.toHaveProperty('lines');
-    expect(body.claims[0]).not.toHaveProperty('next_action');
+    // Only the action and the day it is suggested from: no reason and no guide in the list.
+    expect(body.claims[0]?.next_action).toEqual({
+      action: 'SEND_DEMAND',
+      earliest_on: '2026-11-06',
+    });
+    expect(body.claims[1]?.next_action).toEqual({
+      action: 'SEND_REMINDER',
+      earliest_on: '2026-10-30',
+    });
 
     const paged = await t.call(user, 'GET', '/api/claims?limit=1&offset=1');
     const pagedBody = (
@@ -784,7 +813,7 @@ describe('GET /api/claims/:id', () => {
     const res = await t.call(user, 'GET', `/api/claims/${created.id}`);
 
     expect(res.status).toBe(200);
-    const shown = claimOf(res);
+    const { next_action, ...shown } = claimOf(res);
     expect({ ...shown, events: [] }).toEqual({ ...created, events: [] });
     expect(shown.lines[0]?.segments[0]).toMatchObject({
       year_days: 365,
@@ -796,7 +825,12 @@ describe('GET /api/claims/:id', () => {
       ['DEMAND_SENT', '2026-10-31'],
       ['NOTE', '2026-10-31'],
     ]);
-    expect(res.json).not.toHaveProperty('data.claim.next_action');
+    // The demand was sent on 31 Oct and today is 31 Oct: the burofax comes next, 10 days later.
+    expect(next_action).toMatchObject({
+      action: 'SEND_BUROFAX',
+      earliest_on: '2026-11-10',
+      wait_days: 10,
+    });
   });
 
   it('keeps the numbers of the claim when the rate table or the invoices change afterwards', async () => {
@@ -811,7 +845,7 @@ describe('GET /api/claims/:id', () => {
     await t.db.query(`update invoices set amount_cents = 999 where id = $1`, [
       a.id,
     ]);
-    const shown = claimOf(
+    const { next_action, ...shown } = claimOf(
       await t.call(user, 'GET', `/api/claims/${created.id}`),
     );
     await t.db.query(
@@ -820,6 +854,7 @@ describe('GET /api/claims/:id', () => {
     );
 
     expect(shown).toEqual(created);
+    expect(next_action?.action).toBe('SEND_REMINDER');
   });
 
   it('answers 404 for an id that does not exist or is not an id', async () => {
@@ -830,6 +865,201 @@ describe('GET /api/claims/:id', () => {
       expect(res.status).toBe(404);
       expect(errorOf(res).code).toBe('NOT_FOUND');
     }
+  });
+});
+
+describe('the next action of a claim', () => {
+  // A claim dated 10 Oct 2026 for a BUSINESS debtor, so events can be recorded from that day on.
+  async function newClaim(overrides: Record<string, unknown> = {}) {
+    const user = await t.makeUser();
+    const { debtorId } = await setup(user);
+    const created = await claimOK(user, {
+      debtor_id: debtorId,
+      as_of: '2026-10-10',
+      ...overrides,
+    });
+    const event = async (kind: string, occurred_on: string) => {
+      const res = await t.call(
+        user,
+        'POST',
+        `/api/claims/${created.id}/events`,
+        { kind, occurred_on },
+      );
+      expect(res.status, res.text).toBe(201);
+    };
+    const next = async () => {
+      const res = await t.call(user, 'GET', `/api/claims/${created.id}`);
+      expect(res.status, res.text).toBe(200);
+      const action = claimOf(res).next_action;
+      expect(action).toBeDefined();
+      return action as NextActionJson;
+    };
+    const nextInList = async () => {
+      const res = await t.call(user, 'GET', '/api/claims');
+      const claims = (res.json as { data: { claims: ClaimListItem[] } }).data
+        .claims;
+      return claims.find((c) => c.id === created.id)?.next_action;
+    };
+    return { user, debtorId, created, event, next, nextInList };
+  }
+
+  it('starts with the optional reminder, today, and the guide of that step', async () => {
+    const { next, nextInList } = await newClaim();
+
+    const action = await next();
+
+    expect(action).toMatchObject({
+      action: 'SEND_REMINDER',
+      earliest_on: '2026-10-30',
+      wait_days: 0,
+      warnings: [],
+    });
+    expect(action.guide.title).toBe('Envía un recordatorio amable');
+    expect(action.guide.template?.placeholders).toContain('debtor_name');
+    expect(await nextInList()).toEqual({
+      action: 'SEND_REMINDER',
+      earliest_on: '2026-10-30',
+    });
+  });
+
+  it('moves up the ladder with each event recorded through the API, in the detail and in the list', async () => {
+    const { event, next, nextInList } = await newClaim();
+
+    await event('REMINDER_SENT', '2026-10-12');
+    expect(await next()).toMatchObject({
+      action: 'SEND_DEMAND',
+      earliest_on: '2026-10-19',
+      wait_days: 7,
+    });
+    expect((await next()).reason).toMatch(/^Ya puedes/);
+
+    await event('DEMAND_SENT', '2026-10-25');
+    expect(await next()).toMatchObject({
+      action: 'SEND_BUROFAX',
+      earliest_on: '2026-11-04',
+      wait_days: 10,
+    });
+    expect((await next()).reason).toMatch(/^Aún es pronto/);
+    expect(await nextInList()).toEqual({
+      action: 'SEND_BUROFAX',
+      earliest_on: '2026-11-04',
+    });
+
+    await event('BUROFAX_SENT', '2026-10-30');
+    const burofax = await next();
+    expect(burofax).toMatchObject({
+      action: 'FILE_MONITORIO',
+      earliest_on: '2026-11-09',
+    });
+    expect(burofax.guide.template).toBeNull();
+    expect(burofax.guide.notes.join(' ')).toContain(
+      'Valora consultar a un abogado',
+    );
+
+    await event('MONITORIO_FILED', '2026-10-30');
+    expect(await next()).toMatchObject({ action: 'DONE', earliest_on: null });
+    expect(await nextInList()).toEqual({ action: 'DONE', earliest_on: null });
+  });
+
+  it('lets a step be skipped, and a NOTE changes nothing', async () => {
+    const { event, next } = await newClaim();
+
+    await event('DEMAND_SENT', '2026-10-20');
+    await event('NOTE', '2026-10-29');
+
+    expect(await next()).toMatchObject({
+      action: 'SEND_BUROFAX',
+      earliest_on: '2026-10-30',
+    });
+  });
+
+  it('a PAID event closes it', async () => {
+    const { event, next, nextInList } = await newClaim();
+
+    await event('REMINDER_SENT', '2026-10-12');
+    await event('PAID', '2026-10-28');
+
+    const action = await next();
+    expect(action).toMatchObject({ action: 'DONE', earliest_on: null });
+    expect(action.reason).toContain('pagada');
+    expect(action.guide.title).toBe('No quedan pasos pendientes');
+    expect(await nextInList()).toEqual({ action: 'DONE', earliest_on: null });
+  });
+
+  it('is BLOCKED when the debtor kind is changed to one that is not a business, and back again', async () => {
+    const { user, debtorId, event, next, nextInList } = await newClaim();
+    await event('REMINDER_SENT', '2026-10-12');
+
+    for (const kind of ['CONSUMER', 'PUBLIC_ADMIN', 'UNKNOWN']) {
+      await setKind(user, debtorId, kind);
+      const action = await next();
+      expect(action, kind).toMatchObject({
+        action: 'BLOCKED',
+        earliest_on: null,
+        wait_days: 0,
+      });
+      expect(action.guide.title).toBe(
+        'Antes de seguir, revisa el tipo de deudor',
+      );
+      expect(await nextInList(), kind).toEqual({
+        action: 'BLOCKED',
+        earliest_on: null,
+      });
+    }
+
+    await setKind(user, debtorId, 'BUSINESS');
+    expect((await next()).action).toBe('SEND_DEMAND');
+  });
+
+  it('warns about a possible limitation when the oldest invoice is more than four and a half years old', async () => {
+    const user = await t.makeUser();
+    const old = await create(user, {
+      number: 'OLD',
+      issue_date: '2021-02-01',
+      due_date: '2021-03-01',
+    });
+    await setKind(user, old.debtor_id, 'BUSINESS');
+    const created = await claimOK(user, { debtor_id: old.debtor_id });
+
+    const res = await t.call(user, 'GET', `/api/claims/${created.id}`);
+    const list = await t.call(user, 'GET', '/api/claims');
+
+    const warnings = claimOf(res).next_action?.warnings;
+    expect(warnings).toHaveLength(1);
+    expect(warnings?.[0]?.code).toBe('POSSIBLE_LIMITATION');
+    expect(warnings?.[0]?.message).toContain('01/03/2021');
+    // The list does not carry warnings.
+    expect(JSON.stringify(list.json)).not.toContain('POSSIBLE_LIMITATION');
+  });
+
+  it('shows each user only the next action of their own claims', async () => {
+    const mine = await newClaim();
+    const other = await newClaim();
+    await other.event('PAID', '2026-10-28');
+
+    const own = await mine.nextInList();
+    const theirs = await t.call(
+      mine.user,
+      'GET',
+      `/api/claims/${other.created.id}`,
+    );
+
+    expect(own?.action).toBe('SEND_REMINDER');
+    expect(theirs.status).toBe(404);
+    const list = await t.call(mine.user, 'GET', '/api/claims');
+    expect(
+      (list.json as { data: { claims: unknown[] } }).data.claims,
+    ).toHaveLength(1);
+  });
+
+  it('the list works for an empty page and keeps its pagination', async () => {
+    const { user } = await newClaim();
+
+    const res = await t.call(user, 'GET', '/api/claims?limit=1&offset=5');
+
+    expect(res.json).toEqual({
+      data: { claims: [], page: { limit: 1, offset: 5, total: 1 } },
+    });
   });
 });
 
@@ -897,10 +1127,11 @@ describe('POST /api/claims/:id/events', () => {
     );
     expect(after).toEqual(before);
     expect(after.status).toBe('OPEN');
-    const shown = claimOf(
+    const { next_action, ...shown } = claimOf(
       await t.call(user, 'GET', `/api/claims/${created.id}`),
     );
     expect({ ...shown, events: [] }).toEqual({ ...created, events: [] });
+    expect(next_action?.action).toBe('DONE'); // the claim is closed, the invoice is not
   });
 
   it('cannot be in the future', async () => {

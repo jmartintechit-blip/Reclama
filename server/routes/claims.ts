@@ -10,6 +10,7 @@ import {
   getClaimHeader,
   listClaimedInvoiceIds,
   listClaims,
+  listEscalationInputs,
   MAX_CLAIMS_PER_USER,
   type ClaimDetail,
 } from '../db/claims.ts';
@@ -34,6 +35,8 @@ import {
   type ClaimResult,
 } from '../domain/claim.ts';
 import { todayMadrid, type Clock } from '../domain/dates.ts';
+import { nextAction } from '../domain/escalation.ts';
+import { ESCALATION_GUIDE } from '../domain/escalation-guide.ts';
 import { RateWindowError, type InterestSegment } from '../domain/interest.ts';
 import { WRITE_RATE_LIMIT, type DefineRoute } from '../http/routes.ts';
 import { idParam, isoDate, pageQuery, text, uuid } from '../http/schemas.ts';
@@ -123,9 +126,25 @@ export function registerClaimRoutes(
       const userId = session.user.id;
       const total = await countClaims(db, userId);
       const claims = await listClaims(db, userId, query);
+      const inputs = await listEscalationInputs(
+        db,
+        userId,
+        claims.map((claim) => claim.id),
+      );
+      const today = todayMadrid(clock);
       res.json({
         data: {
-          claims,
+          // Only the action and the day from which it is suggested: the guide would make the list
+          // heavy, and the limitation warning needs the lines, which the list does not load.
+          claims: claims.map((claim) => {
+            const { action, earliest_on } = nextAction({
+              today,
+              claim: { lines: [] },
+              events: inputs.get(claim.id)?.events ?? [],
+              debtorKind: inputs.get(claim.id)?.debtor_kind ?? 'UNKNOWN',
+            });
+            return { ...claim, next_action: { action, earliest_on } };
+          }),
           page: { limit: query.limit, offset: query.offset, total },
         },
       });
@@ -327,7 +346,23 @@ export function registerClaimRoutes(
         sendNotFound(res);
         return;
       }
-      res.json({ data: { claim: claimJson(claim) } });
+      const debtor = await getDebtor(db, session.user.id, claim.debtor_id);
+      const next = nextAction({
+        today: todayMadrid(clock),
+        claim,
+        events: claim.events,
+        debtorKind: debtor?.kind ?? 'UNKNOWN',
+      });
+      res.json({
+        data: {
+          claim: {
+            ...claimJson(claim),
+            // The engine's answer with the matching guide: `next` is computed on every read from
+            // the events, nothing about it is stored.
+            next_action: { ...next, guide: ESCALATION_GUIDE[next.action] },
+          },
+        },
+      });
     },
   });
 

@@ -297,7 +297,7 @@ function draw(doc: Doc, data: LetterData): void {
   const estimatedNote = data.invoices.some(
     (invoice) => invoice.dueDateEstimated,
   )
-    ? '* Sin fecha de pago pactada: se ha tomado el plazo de 30 días naturales desde la fecha de emisión de la factura (art. 4 de la Ley 3/2004).'
+    ? '* Sin fecha de pago pactada: se ha estimado el vencimiento en 30 días naturales desde la fecha de emisión de la factura (el plazo legal del art. 4 de la Ley 3/2004 se cuenta desde la recepción de las mercancías o servicios).'
     : null;
   const noteHeight =
     estimatedNote === null ? 0 : heightOf(estimatedNote, WIDTH, REGULAR, 8) + 6;

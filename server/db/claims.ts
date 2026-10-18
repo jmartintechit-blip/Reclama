@@ -1,4 +1,8 @@
-import type { ClaimResult, CompensationMode } from '../domain/claim.ts';
+import type {
+  ClaimResult,
+  CompensationMode,
+  DebtorKind,
+} from '../domain/claim.ts';
 import type { ISODate } from '../domain/dates.ts';
 import type { InterestSegment } from '../domain/interest.ts';
 import type { Cents } from '../domain/money.ts';
@@ -234,6 +238,43 @@ export async function getClaim(
     lines: lines.rows as FrozenLine[],
     events: events.rows as ClaimEvent[],
   };
+}
+
+// What the next-action engine reads for each of `claimIds` (the user's own; others are left out):
+// the kind of the debtor and the events, oldest first with ties in recording order, as in getClaim.
+export async function listEscalationInputs(
+  db: Db,
+  userId: string,
+  claimIds: readonly string[],
+): Promise<
+  Map<
+    string,
+    {
+      debtor_kind: DebtorKind;
+      events: { kind: EventKind; occurred_on: ISODate }[];
+    }
+  >
+> {
+  const { rows } = await db.query(
+    `select c.id, d.kind as debtor_kind,
+            coalesce(jsonb_agg(jsonb_build_object('kind', e.kind, 'occurred_on', e.occurred_on)
+                               order by e.occurred_on, e.created_at, e.id)
+                     filter (where e.id is not null), '[]'::jsonb) as events
+       ${CLAIM_FROM}
+       left join claim_events e on e.user_id = c.user_id and e.claim_id = c.id
+      where c.user_id = $1 and c.id = any($2::uuid[])
+      group by c.id, d.kind`,
+    [userId, claimIds],
+  );
+  return new Map(
+    (
+      rows as {
+        id: string;
+        debtor_kind: DebtorKind;
+        events: { kind: EventKind; occurred_on: ISODate }[];
+      }[]
+    ).map(({ id, ...inputs }) => [id, inputs]),
+  );
 }
 
 // Which of `invoiceIds` are already in a claim of the user.
