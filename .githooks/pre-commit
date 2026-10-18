@@ -4,4 +4,6 @@ set -e
 npm run --silent lint
 npm run --silent typecheck
 npm run --silent format:check
-npm run --silent test
+# A Vitest worker sometimes dies on Windows (native crash, exit code 3221226505) for no known
+# reason; a real failure fails the second run too.
+npm run --silent test || npm run --silent test
