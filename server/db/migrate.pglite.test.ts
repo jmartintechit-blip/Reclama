@@ -25,14 +25,19 @@ afterAll(async () => {
 });
 
 describe('runMigrations against a real Postgres', () => {
-  it('applied 0001 and recorded its checksum', async () => {
+  it('applied 0001 and 0002 and recorded their checksums', async () => {
     const initial = real.find((m) => m.name === '0001_initial_schema.sql');
+    const guard = real.find((m) => m.name === '0002_payment_overpay_guard.sql');
     const { rows } = await db.query(
-      'select name, checksum from schema_migrations',
+      'select name, checksum from schema_migrations order by name',
     );
 
     expect(rows).toEqual([
       { name: '0001_initial_schema.sql', checksum: sha256(initial?.sql ?? '') },
+      {
+        name: '0002_payment_overpay_guard.sql',
+        checksum: sha256(guard?.sql ?? ''),
+      },
     ]);
     const tables = await db.query(
       `select table_name from information_schema.tables
@@ -61,7 +66,7 @@ describe('runMigrations against a real Postgres', () => {
     const { rows } = await db.query(
       'select count(*) as n from schema_migrations',
     );
-    expect(rows[0]?.n).toBe(1);
+    expect(rows[0]?.n).toBe(2);
   });
 
   it('detects a migration that was modified after being applied', async () => {
@@ -87,7 +92,7 @@ describe('a broken migration', () => {
 
   it('rolls back a broken migration, records nothing and applies it once fixed', async () => {
     const broken: Migration = {
-      name: '0002_broken.sql',
+      name: '0003_broken.sql',
       sql: `create table half_done (id int);
             insert into half_done values (1);
             select * from does_not_exist;`,
@@ -100,9 +105,12 @@ describe('a broken migration', () => {
     const table = await own.query(`select to_regclass('half_done') as t`);
     expect(table.rows[0]?.t).toBeNull();
     // ...and the failed migration was not recorded.
-    const recorded = await own.query('select name from schema_migrations');
+    const recorded = await own.query(
+      'select name from schema_migrations order by name',
+    );
     expect(recorded.rows.map((row) => row.name)).toEqual([
       '0001_initial_schema.sql',
+      '0002_payment_overpay_guard.sql',
     ]);
 
     // Control: without the bad statement, the same migration is applied and recorded.

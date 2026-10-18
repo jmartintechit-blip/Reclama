@@ -364,6 +364,41 @@ describe('POST /api/auth/login', () => {
     }
   });
 
+  it('removes the expired sessions of every user on a successful login and keeps the live ones', async () => {
+    const a = await register();
+    const b = await register();
+    nowMs = START + 3 * DAY;
+    const c = await register(); // expires 3 days after a and b
+    nowMs = START + SESSION_LIFETIME_MS + DAY; // a and b are expired, c is not
+    const sessionsOf = async (id: string) => {
+      const { rows } = await db.query(
+        'select count(*)::int as n from sessions where user_id = $1',
+        [id],
+      );
+      return (rows[0] as { n: number }).n;
+    };
+    expect([await sessionsOf(a.id), await sessionsOf(b.id)]).toEqual([1, 1]);
+
+    const wrong = await post('/api/auth/login', {
+      email: a.email,
+      password: WRONG,
+    });
+    expect(wrong.status).toBe(401);
+    expect(await sessionsOf(b.id)).toBe(1); // a failed login cleans nothing
+
+    const res = await post('/api/auth/login', {
+      email: a.email,
+      password: PASSWORD,
+    });
+
+    expect(res.status).toBe(200);
+    expect(await sessionsOf(a.id)).toBe(1); // only the new one
+    expect(await sessionsOf(b.id)).toBe(0);
+    expect(await sessionsOf(c.id)).toBe(1);
+    expect((await getMe(c.cookie)).status).toBe(200);
+    expect((await getMe(cookieOf(res))).status).toBe(200);
+  });
+
   it('gives the same 401 for a wrong password, an unknown email and a demo user, and always spends a hash', async () => {
     const user = await register();
     const demoEmail = newEmail();

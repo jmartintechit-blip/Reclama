@@ -6,7 +6,7 @@ import {
   listDebtorsWithStats,
   updateDebtor,
 } from '../db/debtors.ts';
-import type { DefineRoute } from '../http/routes.ts';
+import { WRITE_RATE_LIMIT, type DefineRoute } from '../http/routes.ts';
 import { idParam, pageQuery } from '../http/schemas.ts';
 import { sendNotFound } from '../middleware/errors.ts';
 import { email } from './auth.ts';
@@ -60,6 +60,7 @@ export function registerDebtorRoutes(
     method: 'PATCH',
     path: '/api/debtors/:id',
     schema: { body: patchSchema },
+    rateLimit: WRITE_RATE_LIMIT,
     handler: async ({ req, res, body, session }) => {
       const userId = session.user.id;
       const id = idParam(req.params.id);

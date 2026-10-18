@@ -6,6 +6,7 @@ import {
   CLAIM_INVOICE_FK,
   DebtorNotFoundError,
   FOREIGN_KEY_VIOLATION,
+  InvoiceAmountBelowPaidError,
   InvoiceDatesError,
   InvoiceDuplicateError,
   InvoiceInClaimError,
@@ -491,5 +492,57 @@ describe('listing with a debtor filter', () => {
     expect(
       await listInvoicesUpTo(db, other, { debtor_id: acme.id }, 10),
     ).toEqual([]);
+  });
+});
+
+// A payment can arrive between the API's own check and the update, so the database refuses an
+// amount below what is paid (a trigger). The route checks first; these call the repository, which
+// skips that check.
+describe('the amount below paid trigger', () => {
+  it('maps the refusal to InvoiceAmountBelowPaidError with what is paid, writing nothing', async () => {
+    const { userId, invoice } = await setup();
+    await addPayment(db, userId, invoice.id, {
+      paid_on: date('2026-02-01'),
+      amount_cents: toCents(60_000),
+    });
+
+    const error: unknown = await updateInvoice(db, userId, invoice.id, {
+      amount_cents: toCents(59_999),
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(InvoiceAmountBelowPaidError);
+    expect((error as InvoiceAmountBelowPaidError).paidCents).toBe(60_000);
+    expect((await getInvoice(db, userId, invoice.id))?.amount_cents).toBe(
+      100_000,
+    );
+    // Control: exactly what is paid is accepted.
+    expect(
+      (
+        await updateInvoice(db, userId, invoice.id, {
+          amount_cents: toCents(60_000),
+        })
+      )?.amount_cents,
+    ).toBe(60_000);
+  });
+
+  it('is a check violation with a fixed constraint name, and ignores updates of other columns', async () => {
+    const { userId, invoice } = await setup();
+    await addPayment(db, userId, invoice.id, {
+      paid_on: date('2026-02-01'),
+      amount_cents: toCents(100_000),
+    });
+
+    await expect(
+      db.query('update invoices set amount_cents = 99999 where id = $1', [
+        invoice.id,
+      ]),
+    ).rejects.toMatchObject({
+      code: '23514',
+      constraint: 'invoices_amount_covers_payments',
+    });
+    // A fully paid invoice can still change status (the payment that settles it does so).
+    expect(
+      (await setInvoiceStatus(db, userId, invoice.id, 'DISPUTED'))?.status,
+    ).toBe('DISPUTED');
   });
 });

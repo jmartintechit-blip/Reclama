@@ -4,6 +4,7 @@ import type { Db } from '../db/client.ts';
 import { findOrCreateDebtor } from '../db/debtors.ts';
 import {
   DebtorNotFoundError,
+  InvoiceAmountBelowPaidError,
   InvoiceDatesError,
   InvoiceDuplicateError,
   InvoiceInClaimError,
@@ -16,6 +17,7 @@ import {
   getInvoice,
   listInvoices,
   listInvoicesUpTo,
+  MAX_INVOICES_PER_USER,
   setInvoiceStatus,
   updateInvoice,
   type Invoice,
@@ -28,7 +30,7 @@ import {
 } from '../db/payments.ts';
 import { listVerifiedRates } from '../db/rates.ts';
 import { todayMadrid, type Clock } from '../domain/dates.ts';
-import type { DefineRoute } from '../http/routes.ts';
+import { WRITE_RATE_LIMIT, type DefineRoute } from '../http/routes.ts';
 import {
   amountCents,
   idParam,
@@ -50,7 +52,7 @@ import { email } from './auth.ts';
 // The totals of a list are computed over at most this many invoices (the first ones, in the
 // order of the list). It keeps one request from loading and calculating an unbounded table; when
 // more invoices match, `totals.truncated` is true.
-export const TOTALS_ROW_CAP = 5000;
+export const TOTALS_ROW_CAP = MAX_INVOICES_PER_USER;
 
 const STATUS = z.enum(['OPEN', 'PAID', 'DISPUTED']);
 
@@ -109,6 +111,14 @@ function sendRepoError(res: Response, error: unknown): boolean {
     sendError(res, 409, 'INVOICE_IN_CLAIM', error.message);
   } else if (error instanceof InvoiceDatesError) {
     sendError(res, 422, 'DUE_BEFORE_ISSUE', error.message);
+  } else if (error instanceof InvoiceAmountBelowPaidError) {
+    sendError(
+      res,
+      422,
+      'AMOUNT_BELOW_PAID',
+      'The amount is below what has already been paid',
+      { paid_cents: error.paidCents },
+    );
   } else if (error instanceof PaymentExceedsBalanceError) {
     sendError(res, 422, 'PAYMENT_EXCEEDS_BALANCE', error.message, {
       remaining_cents: error.remainingCents,
@@ -195,6 +205,7 @@ export function registerInvoiceRoutes(
     method: 'POST',
     path: '/api/invoices',
     schema: { body: createSchema },
+    rateLimit: WRITE_RATE_LIMIT,
     handler: async ({ res, body, session }) => {
       const userId = session.user.id;
       // Checked here, before anything is written (the database CHECK is only the backstop).
@@ -204,6 +215,18 @@ export function registerInvoiceRoutes(
           422,
           'DUE_BEFORE_ISSUE',
           'The due date is before the issue date',
+        );
+        return;
+      }
+      // Counted before anything is written. Requests that run at the same instant can pass the
+      // count together and overshoot by a few; the write rate limit keeps that small.
+      if ((await countInvoices(db, userId)) >= MAX_INVOICES_PER_USER) {
+        sendError(
+          res,
+          422,
+          'INVOICE_LIMIT_REACHED',
+          'The limit of invoices per account has been reached',
+          { limit: MAX_INVOICES_PER_USER },
         );
         return;
       }
@@ -251,6 +274,7 @@ export function registerInvoiceRoutes(
     method: 'PATCH',
     path: '/api/invoices/:id',
     schema: { body: patchSchema },
+    rateLimit: WRITE_RATE_LIMIT,
     handler: async ({ req, res, body, session }) => {
       const userId = session.user.id;
       const id = idParam(req.params.id);
@@ -275,9 +299,10 @@ export function registerInvoiceRoutes(
         return;
       }
 
-      // These two checks read the payments and then the write happens in another statement: a
-      // payment recorded in between can still slip through (Db has no transactions, as in
-      // addPayment). The interest code reports such an invoice as CALCULATION_FAILED, not as a crash.
+      // These checks read the payments and then the write happens in another statement: a
+      // payment recorded in between can still slip through (Db has no transactions). For the
+      // amount, a database trigger refuses it (reported as AMOUNT_BELOW_PAID below). For the
+      // dates, the interest code reports such an invoice as CALCULATION_FAILED, not as a crash.
       const payments = await listPayments(db, userId, current.id);
       const paid = sumOf(payments);
       const amount = fields.amount_cents ?? current.amount_cents;
@@ -357,6 +382,7 @@ export function registerInvoiceRoutes(
   defineRoute({
     method: 'DELETE',
     path: '/api/invoices/:id',
+    rateLimit: WRITE_RATE_LIMIT,
     handler: async ({ req, res, session }) => {
       const id = idParam(req.params.id);
       try {
@@ -377,6 +403,7 @@ export function registerInvoiceRoutes(
     method: 'POST',
     path: '/api/invoices/:id/payments',
     schema: { body: paymentSchema },
+    rateLimit: WRITE_RATE_LIMIT,
     handler: async ({ req, res, body, session }) => {
       const userId = session.user.id;
       const id = idParam(req.params.id);

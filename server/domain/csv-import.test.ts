@@ -477,6 +477,29 @@ describe('parseInvoiceCsv: text fields', () => {
     expect(result.rows.map((r) => r.number)).toEqual(['F4', 'F5']);
   });
 
+  it('applies the API rule: no several addresses or display names, and the address is lowercased', () => {
+    const result = ok(
+      'Factura;Cliente;Email;Fecha;Importe\n' +
+        'F1;Acme;"a@x.com,b@y.com";01/03/2026;5\n' +
+        'F2;Acme;"a@x.com;b@y.com";01/03/2026;5\n' +
+        'F3;Acme;"<a@x.com>";01/03/2026;5\n' +
+        'F4;Acme;"Ana <a@x.com>";01/03/2026;5\n' +
+        'F5;Acme;"""a""@x.com";01/03/2026;5\n' +
+        'F6;Acme;  A.B@X.COM ;01/03/2026;5\n',
+    );
+
+    expect(brief(result.errors)).toEqual([
+      [2, 'email', 'INVALID_EMAIL'],
+      [3, 'email', 'INVALID_EMAIL'],
+      [4, 'email', 'INVALID_EMAIL'],
+      [5, 'email', 'INVALID_EMAIL'],
+      [6, 'email', 'INVALID_EMAIL'],
+    ]);
+    expect(result.rows.map((r) => [r.number, r.email])).toEqual([
+      ['F6', 'a.b@x.com'],
+    ]);
+  });
+
   it('accepts a value of exactly the maximum length and rejects one more', () => {
     const result = ok(
       file(

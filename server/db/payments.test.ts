@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { toCents } from '../domain/money.ts';
+import type { Db } from './client.ts';
 import { findOrCreateDebtor } from './debtors.ts';
 import { PaymentExceedsBalanceError } from './errors.ts';
 import { createInvoice, getInvoice } from './invoices.ts';
@@ -77,7 +78,7 @@ describe('addPayment', () => {
   });
 
   // The behaviour of payments that come one after another. Two payments at the same instant
-  // are not covered here on purpose: see the comment on addPayment.
+  // are covered by the trigger tests at the end of this file.
   it('counts the earlier payments: the sum can reach the amount but never pass it', async () => {
     const { userId, invoice } = await setup();
 
@@ -228,5 +229,98 @@ describe('listPaymentsForInvoices', () => {
       [invoice.id, 1_000],
     ]);
     expect(await listPaymentsForInvoices(db, userId, [])).toEqual([]);
+  });
+});
+
+// Two payments that run at the same instant both pass the check inside addPayment (see its
+// comment). PGlite has one connection, so the race itself cannot be reproduced here; these tests
+// insert with raw SQL, which skips that check, to prove that the database refuses the sum.
+describe('the overpayment trigger', () => {
+  const insertRaw = (userId: string, invoiceId: string, cents: number) =>
+    db.query(
+      `insert into payments (user_id, invoice_id, paid_on, amount_cents)
+       values ($1, $2, '2026-02-01', $3)`,
+      [userId, invoiceId, cents],
+    );
+  const refused = {
+    code: '23514',
+    constraint: 'payments_total_within_invoice',
+  };
+
+  it('refuses a payment that makes the total pass the amount and accepts one that reaches it', async () => {
+    const { userId, invoice } = await setup();
+
+    await insertRaw(userId, invoice.id, 60_000);
+    await expect(insertRaw(userId, invoice.id, 60_000)).rejects.toMatchObject(
+      refused,
+    );
+    await insertRaw(userId, invoice.id, 40_000);
+    await expect(insertRaw(userId, invoice.id, 1)).rejects.toMatchObject(
+      refused,
+    );
+
+    // Same date, so the order of the list is not defined: compare the amounts sorted.
+    const payments = await listPayments(db, userId, invoice.id);
+    expect(payments.map((p) => p.amount_cents).sort((x, y) => x - y)).toEqual([
+      40_000, 60_000,
+    ]);
+  });
+
+  it('refuses one payment above the whole amount, and counts only the same invoice', async () => {
+    const { userId, invoice } = await setup();
+    const other = await createInvoice(db, userId, {
+      debtor_id: invoice.debtor_id,
+      number: 'F-2',
+      issue_date: date('2026-01-10'),
+      amount_cents: toCents(100_000),
+    });
+
+    await expect(insertRaw(userId, invoice.id, 100_001)).rejects.toMatchObject(
+      refused,
+    );
+    await insertRaw(userId, other.id, 100_000);
+    await insertRaw(userId, invoice.id, 100_000); // not counted against the other invoice
+  });
+
+  it('leaves a payment for a missing invoice to the foreign key', async () => {
+    const { userId } = await setup();
+
+    await expect(insertRaw(userId, MISSING_ID, 1)).rejects.toMatchObject({
+      code: '23503',
+    });
+  });
+
+  it('is reported by addPayment as PAYMENT_EXCEEDS_BALANCE with the balance left', async () => {
+    const { userId, invoice } = await setup();
+    await addPayment(db, userId, invoice.id, pay(60_000));
+    // The statement of a payment that lost the race: it passes addPayment's own check and the
+    // trigger refuses it.
+    const racing: Db = {
+      query: (sql, params) =>
+        sql.includes('with inserted')
+          ? Promise.reject(Object.assign(new Error('refused'), refused))
+          : db.query(sql, params),
+    };
+
+    const error: unknown = await addPayment(
+      racing,
+      userId,
+      invoice.id,
+      pay(60_000),
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(PaymentExceedsBalanceError);
+    expect((error as PaymentExceedsBalanceError).remainingCents).toBe(40_000);
+  });
+
+  it('does not hide other errors of the insert', async () => {
+    const { userId, invoice } = await setup();
+    const broken: Db = {
+      query: () => Promise.reject(new Error('connection reset')),
+    };
+
+    await expect(
+      addPayment(broken, userId, invoice.id, pay(1)),
+    ).rejects.toThrow('connection reset');
   });
 });

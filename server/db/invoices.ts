@@ -1,14 +1,16 @@
 import type { ISODate } from '../domain/dates.ts';
-import type { Cents } from '../domain/money.ts';
+import { toCents, type Cents } from '../domain/money.ts';
 import type { Db } from './client.ts';
 import {
   CHECK_VIOLATION,
   CLAIM_INVOICE_FK,
   DebtorNotFoundError,
   FOREIGN_KEY_VIOLATION,
+  INVOICE_AMOUNT_CHECK,
   INVOICE_DATES_CHECK,
   INVOICE_DEBTOR_FK,
   INVOICE_NUMBER_UNIQUE,
+  InvoiceAmountBelowPaidError,
   InvoiceDatesError,
   InvoiceDuplicateError,
   InvoiceInClaimError,
@@ -19,6 +21,10 @@ import { buildSet, normalizePage, type Page } from './query-helpers.ts';
 
 // Every function takes `userId` first and puts `user_id` in its SQL: an id alone is never
 // trusted. An invoice of another user behaves exactly like one that does not exist.
+
+// The most invoices one user can have. It bounds what one account can store and what one list
+// request has to load, whether the invoices come from the API or from a CSV import.
+export const MAX_INVOICES_PER_USER = 2000;
 
 export type InvoiceStatus = 'OPEN' | 'PAID' | 'DISPUTED';
 
@@ -201,6 +207,17 @@ export async function updateInvoice(
     }
     if (violates(error, CHECK_VIOLATION, INVOICE_DATES_CHECK)) {
       throw new InvoiceDatesError();
+    }
+    if (violates(error, CHECK_VIOLATION, INVOICE_AMOUNT_CHECK)) {
+      // A payment recorded after the caller read the payments: report what is paid now.
+      const { rows } = await db.query(
+        `select coalesce(sum(amount_cents), 0)::bigint as paid
+           from payments where user_id = $1 and invoice_id = $2`,
+        [userId, invoiceId],
+      );
+      throw new InvoiceAmountBelowPaidError(
+        toCents((rows[0] as { paid: number }).paid),
+      );
     }
     throw error;
   }

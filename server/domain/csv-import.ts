@@ -9,6 +9,7 @@
 import Papa from 'papaparse';
 import { diffDays, parseISODate, type ISODate } from './dates.ts';
 import { debtorMatchKey, normalizeTaxId } from './debtor.ts';
+import { normalizeEmail } from './email.ts';
 import { parseMoney, type Cents, type MoneyErrorCode } from './money.ts';
 
 export const MAX_CSV_BYTES = 1_048_576;
@@ -274,7 +275,6 @@ type TextField = 'number' | 'debtorName' | 'taxId' | 'email';
 const FORMULA_PREFIX = /^[=+\-@]/;
 // Control characters and invisible format characters (zero width, bidirectional marks).
 const FORBIDDEN_CHARS = /[\p{Cc}\p{Cf}]/u;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const DMY_DATE = /^(\d{1,2})([/.-])(\d{1,2})\2(\d{4})$/;
 const YMD_DATE = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
@@ -403,8 +403,9 @@ function parseRecord(
   const number = readText('number', true);
   const debtorName = readText('debtorName', true);
   const rawTaxId = readText('taxId', false);
-  const email = readText('email', false);
-  if (email !== null && !EMAIL.test(email)) {
+  const rawEmail = readText('email', false);
+  const email = rawEmail === null ? null : normalizeEmail(rawEmail);
+  if (rawEmail !== null && email === null) {
     addError('email', 'INVALID_EMAIL', 'The email is not valid');
   }
   const issueDate = readDate('issueDate');

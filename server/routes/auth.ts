@@ -10,28 +10,24 @@ import {
 } from '../auth/password.ts';
 import type { Db } from '../db/client.ts';
 import { hashKeyPart } from '../db/rate-limits.ts';
-import { deleteSession } from '../db/sessions.ts';
+import { deleteExpiredSessions, deleteSession } from '../db/sessions.ts';
 import {
   createUserWithProfile,
   findUserByEmail,
   replacePasswordHash,
 } from '../db/users.ts';
 import type { Clock } from '../domain/dates.ts';
+import { EMAIL_MAX_LENGTH, EMAIL_PATTERN } from '../domain/email.ts';
 import type { DefineRoute } from '../http/routes.ts';
 import { sendError } from '../middleware/errors.ts';
 
-// Trim and lowercase first, then the length, then the shape. ASCII only on purpose: the
-// database check `email = lower(email)` must agree with JavaScript's toLowerCase(), and for
-// non-ASCII letters the two can differ. The shape is "something@label.label" with a linear
-// regex (no nested repeats), so a long input cannot make it slow.
+// Trim and lowercase first, then the length, then the shape (see domain/email.ts).
 export const email = z
   .string()
   .trim()
   .toLowerCase()
-  .max(254, { abort: true })
-  .regex(/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/, {
-    message: 'Must be a valid email address',
-  });
+  .max(EMAIL_MAX_LENGTH, { abort: true })
+  .regex(EMAIL_PATTERN, { message: 'Must be a valid email address' });
 
 const PASSWORD_MESSAGES: Record<PasswordErrorCode, string> = {
   NOT_A_STRING: 'Must be a string',
@@ -98,12 +94,35 @@ export function registerAuthRoutes(
     path: '/api/auth/login',
     auth: 'public',
     schema: { body: loginSchema },
-    rateLimit: {
-      name: 'login',
-      limit: 5,
-      windowSeconds: 15 * 60,
-      key: (body, ip) => `${ip}:${hashKeyPart(body.email)}`,
-    },
+    // Three counters, checked in this order (the first one that refuses answers 429 and the
+    // others do not count that request, so a blocked attacker cannot burn the victim's counter):
+    // - one email from one IP: 5 per 15 minutes;
+    // - one email from anywhere: 20 per 15 minutes. This stops guessing spread over many IPs,
+    //   but it has a price: someone who knows an email can send 20 wrong attempts and lock the
+    //   real owner out of that account for up to 15 minutes (a denial of service on one
+    //   account, with no way into it). We accept it: a short lockout is cheaper than guessing;
+    // - any email from one IP (an IPv6 address counts as its /64): 30 per 15 minutes. This
+    //   stops one host from trying many accounts. Others behind the same address share it.
+    rateLimit: [
+      {
+        name: 'login',
+        limit: 5,
+        windowSeconds: 15 * 60,
+        key: (body, ip) => `${ip}:${hashKeyPart(body.email)}`,
+      },
+      {
+        name: 'login-account',
+        limit: 20,
+        windowSeconds: 15 * 60,
+        key: (body) => hashKeyPart(body.email),
+      },
+      {
+        name: 'login-ip',
+        limit: 30,
+        windowSeconds: 15 * 60,
+        key: (_body, ip) => ip,
+      },
+    ],
     handler: async ({ res, body }) => {
       const found = await findUserByEmail(db, body.email);
       const storedHash = found?.password_hash ?? null;
@@ -130,6 +149,9 @@ export function registerAuthRoutes(
         }
       }
 
+      // Housekeeping without a cron job (as in the rate limits): a login also removes the
+      // sessions that have already expired, so the table does not fill up with dead rows.
+      await deleteExpiredSessions(db, clock.now());
       await startSession(db, clock, res, found.id);
       res.json({ data: { user: { id: found.id, email: found.email } } });
     },

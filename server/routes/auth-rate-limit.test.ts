@@ -198,6 +198,98 @@ describe('POST /api/auth/login limit: 5 per 15 minutes per IP and email', () => 
   });
 });
 
+describe('POST /api/auth/login limit: 20 per 15 minutes per account, from any IP', () => {
+  // Each IP stays under its own limit of 5 attempts for this email.
+  const wrongFromFiveIps = async (email: string) => {
+    for (const last of [1, 2, 3, 4, 5]) {
+      for (let i = 0; i < 4; i += 1) {
+        expect(
+          (await login(email, WRONG, `10.1.0.${String(last)}`)).status,
+        ).toBe(401);
+      }
+    }
+  };
+
+  it('refuses the 21st attempt from a new IP, even with the right password', async () => {
+    const email = newEmail();
+    await register(email, '10.1.1.1');
+    await wrongFromFiveIps(email);
+
+    const res = await login(email, PASSWORD, '10.1.0.99');
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('retry-after')).toBe(String(15 * 60));
+    expect(await sessionsOf(email)).toBe(1); // only the one made by register
+  });
+
+  it('does not affect another account, and counts again in the next window', async () => {
+    const email = newEmail();
+    const other = newEmail();
+    await register(email, '10.1.1.1');
+    await register(other, '10.1.1.1');
+    await wrongFromFiveIps(email);
+
+    expect((await login(other, PASSWORD, '10.1.0.99')).status).toBe(200);
+
+    nowMs = START + 15 * MINUTE;
+    expect((await login(email, PASSWORD, '10.1.0.99')).status).toBe(200);
+  });
+
+  it('is not used up by attempts that the IP and email limit already refused', async () => {
+    const email = newEmail();
+    for (let i = 0; i < 12; i += 1) await login(email, WRONG, '10.1.2.1');
+
+    const { rows } = await db.query(
+      'select hits from rate_limits where key = $1',
+      [`login-account:${hashKeyPart(email)}`],
+    );
+
+    expect(rows).toEqual([{ hits: 5 }]);
+  });
+});
+
+describe('POST /api/auth/login limit: 30 per 15 minutes per IP, for any email', () => {
+  it('refuses the 31st attempt from the same IP, even for a new email with the right password', async () => {
+    const email = newEmail();
+    await register(email, '10.2.0.1');
+    for (let i = 0; i < 30; i += 1) {
+      expect((await login(newEmail(), WRONG, '10.2.0.2')).status).toBe(401);
+    }
+
+    const res = await login(email, PASSWORD, '10.2.0.2');
+
+    expect(res.status).toBe(429);
+    expect((await login(email, PASSWORD, '10.2.0.3')).status).toBe(200);
+  });
+
+  it('does not block a correct login because of failures on other emails', async () => {
+    const victim = newEmail();
+    const mine = newEmail();
+    await register(mine, '10.2.1.1');
+    for (let i = 0; i < 6; i += 1) await login(victim, WRONG, '10.2.1.2');
+
+    const res = await login(mine, PASSWORD, '10.2.1.2');
+
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('rate-limit keys use the /64 of an IPv6 address', () => {
+  it('shares the counters between addresses of one /64 and not with another /64', async () => {
+    const email = newEmail();
+    await register(email, '10.3.0.1');
+    for (let i = 0; i < 5; i += 1) {
+      await login(email, WRONG, `2001:db8:1:2::${String(i + 1)}`);
+    }
+
+    const sameNetwork = await login(email, PASSWORD, '2001:db8:1:2:aaaa::9');
+    const otherNetwork = await login(email, PASSWORD, '2001:db8:1:3::1');
+
+    expect(sameNetwork.status).toBe(429);
+    expect(otherNetwork.status).toBe(200);
+  });
+});
+
 describe('POST /api/auth/register limit: 5 per hour per IP', () => {
   it('refuses the 6th registration from the same IP and creates no user', async () => {
     nowMs = START + 20 * MINUTE;
@@ -249,11 +341,15 @@ describe('what the limiter stores', () => {
 
     const { rows } = await db.query('select key from rate_limits order by key');
 
-    const keys = rows.map((row) => (row as { key: string }).key);
-    expect(keys).toEqual([
-      `login:10.0.2.2:${hashKeyPart(email)}`,
-      'register:10.0.2.1',
-    ]);
+    const keys = rows.map((row) => (row as { key: string }).key).sort();
+    expect(keys).toEqual(
+      [
+        `login:10.0.2.2:${hashKeyPart(email)}`,
+        `login-account:${hashKeyPart(email)}`,
+        'login-ip:10.0.2.2',
+        'register:10.0.2.1',
+      ].sort(),
+    );
     expect(JSON.stringify(keys)).not.toContain('@');
     expect(JSON.stringify(keys)).not.toContain(email.split('@')[0]);
   });
@@ -267,8 +363,9 @@ describe('what the limiter stores', () => {
     await login(newEmail(), WRONG, '10.0.3.1');
 
     const { rows } = await db.query('select key from rate_limits');
-    expect(rows).toHaveLength(1);
-    expect((rows[0] as { key: string }).key).toMatch(/^login:10\.0\.3\.1:/);
+    const keys = rows.map((row) => (row as { key: string }).key);
+    expect(keys).not.toContain('login:old');
+    expect(keys).toHaveLength(3); // the three login counters of the attempt
   });
 });
 

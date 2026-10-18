@@ -1,7 +1,12 @@
 import type { ISODate } from '../domain/dates.ts';
 import { toCents, type Cents } from '../domain/money.ts';
 import type { Db } from './client.ts';
-import { PaymentExceedsBalanceError } from './errors.ts';
+import {
+  CHECK_VIOLATION,
+  PAYMENT_TOTAL_CHECK,
+  PaymentExceedsBalanceError,
+  violates,
+} from './errors.ts';
 
 // Every function takes `userId` first and puts `user_id` in its SQL: an id alone is never
 // trusted. A payment or invoice of another user behaves exactly like one that does not exist.
@@ -30,10 +35,10 @@ const REMAINING = `i.amount_cents - coalesce(
 // "read the balance" and "write the payment" inside this code.
 //
 // What that does and does not guarantee: Db has no transactions, and a statement works on the
-// snapshot taken when it starts. Payments added one after another are always exact (the tests
-// show it). Two payments that run at the same instant both see the same balance, so together
-// they can still exceed it; closing that gap needs a row lock inside a transaction (or a
-// database trigger), which this interface cannot express.
+// snapshot taken when it starts, so two payments that run at the same instant both pass this
+// check. The database closes that gap: a trigger on payments (migration 0002) locks the invoice
+// and re-reads the payments before accepting the row, and refuses it with a check violation.
+// That refusal is handled below exactly like "nothing was inserted".
 //
 // A payment that brings the balance to zero also sets the invoice to PAID, in the SAME statement
 // (the second CTE sees the balance as it was before the insert, hence "= the amount").
@@ -46,8 +51,9 @@ export async function addPayment(
   invoiceId: string,
   { paid_on, amount_cents }: NewPayment,
 ): Promise<Payment | null> {
-  const { rows } = await db.query(
-    `with inserted as (
+  const { rows } = await db
+    .query(
+      `with inserted as (
        insert into payments (user_id, invoice_id, paid_on, amount_cents)
        select i.user_id, i.id, $3::date, $4::bigint
          from invoices i
@@ -60,8 +66,15 @@ export async function addPayment(
        returning i.id
      )
      select ${COLUMNS} from inserted`,
-    [userId, invoiceId, paid_on, amount_cents],
-  );
+      [userId, invoiceId, paid_on, amount_cents],
+    )
+    .catch((error: unknown) => {
+      // The trigger refused a payment that raced with another one: same outcome as no row.
+      if (violates(error, CHECK_VIOLATION, PAYMENT_TOTAL_CHECK)) {
+        return { rows: [] };
+      }
+      throw error;
+    });
   if (rows[0]) return rows[0] as Payment;
 
   // Nothing was inserted: the invoice is missing (or not the user's), or the amount is too high.

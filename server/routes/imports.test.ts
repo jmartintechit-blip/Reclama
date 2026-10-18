@@ -10,6 +10,7 @@ import { hashKeyPart } from '../db/rate-limits.ts';
 import { createSession } from '../db/sessions.ts';
 import { createTestDb, type TestDb } from '../db/test-db.ts';
 import { createUserWithProfile } from '../db/users.ts';
+import { MAX_INVOICES_PER_USER } from '../db/invoices.ts';
 import { MAX_CSV_BYTES } from '../domain/csv-import.ts';
 import type { Clock } from '../domain/dates.ts';
 import { close, listen } from '../test-utils.ts';
@@ -552,14 +553,15 @@ describe('POST /api/imports real import', () => {
       debtors_created: 100,
       invoices_created: 500,
     });
-    // Two inserts for the whole file; the rest is the session lookup and the rate limit.
+    // Two inserts for the whole file; the rest is the session lookup, the rate limit, and the
+    // preview and the invoice count that the invoice limit needs.
     expect(
       statements.filter((sql) => /insert into debtors/.test(sql)),
     ).toHaveLength(1);
     expect(
       statements.filter((sql) => /insert into invoices/.test(sql)),
     ).toHaveLength(1);
-    expect(statements.length).toBeLessThanOrEqual(6);
+    expect(statements.length).toBeLessThanOrEqual(8);
     expect(await count('invoices', user.id)).toBe(500);
 
     // A dry run is one read and no insert.
@@ -958,5 +960,70 @@ describe('POST /api/imports rate limit', () => {
       { cookie: user.cookie },
     );
     expect(res.status).toBe(429);
+  }, 30_000);
+});
+
+describe('POST /api/imports invoice limit', () => {
+  // A user who already has `existing` invoices (written straight to the database).
+  async function userWithInvoices(existing: number) {
+    const user = await makeUser();
+    const debtor = await findOrCreateDebtor(db, user.id, { name: 'Existing' });
+    await db.query(
+      `insert into invoices (user_id, debtor_id, number, issue_date, amount_cents)
+       select $1, $2, 'E-' || g, '2026-01-01', 1000 from generate_series(1, $3::int) g`,
+      [user.id, debtor.id, existing],
+    );
+    return user;
+  }
+  const newRows = (n: number) =>
+    csv(
+      ...Array.from(
+        { length: n },
+        (_, i) =>
+          `N-${String(i)};Cliente ${String(i)} S.L.;;;01/01/2026;31/01/2026;10,00`,
+      ),
+    );
+
+  it('refuses a file that would pass the limit, in a dry run and for real, writing nothing', async () => {
+    const user = await userWithInvoices(MAX_INVOICES_PER_USER - 10);
+    const file = base64(newRows(11));
+
+    const dry = await post(
+      { csv_base64: file, dry_run: true },
+      { cookie: user.cookie },
+    );
+    const real = await post({ csv_base64: file }, { cookie: user.cookie });
+
+    for (const res of [dry, real]) {
+      expect(res.status).toBe(422);
+      expect((res.json as ErrorBody).error).toMatchObject({
+        code: 'INVOICE_LIMIT_REACHED',
+        details: { limit: MAX_INVOICES_PER_USER },
+      });
+    }
+    expect(await count('invoices', user.id)).toBe(MAX_INVOICES_PER_USER - 10);
+    expect(await count('debtors', user.id)).toBe(1);
+  }, 30_000);
+
+  it('accepts a file that fills the limit exactly, and then the same file again', async () => {
+    const user = await userWithInvoices(MAX_INVOICES_PER_USER - 10);
+
+    const dry = await importCsv(user, newRows(10), { dry_run: true });
+    const first = await importCsv(user, newRows(10));
+    // Nothing new in the second file: the invoices that already exist do not count.
+    const again = await importCsv(user, newRows(10));
+
+    expect(dry.invoices_created).toBe(10);
+    expect(first.invoices_created).toBe(10);
+    expect(again).toMatchObject({
+      invoices_created: 0,
+      invoices_already_imported: 10,
+    });
+    expect(await count('invoices', user.id)).toBe(MAX_INVOICES_PER_USER);
+    const over = await post(
+      { csv_base64: base64(newRows(11)) },
+      { cookie: user.cookie },
+    );
+    expect(over.status).toBe(422);
   }, 30_000);
 });

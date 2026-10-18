@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { importInvoices, previewImport } from '../db/imports.ts';
+import { countInvoices, MAX_INVOICES_PER_USER } from '../db/invoices.ts';
 import { hashKeyPart } from '../db/rate-limits.ts';
 import {
   MAX_CSV_BYTES,
@@ -85,9 +86,23 @@ export function registerImportRoutes(
 
       // In a dry run the three counts are what a real import WOULD create or skip.
       const userId = session.user.id;
-      const dryRunResult = dryRun
-        ? await previewImport(db, userId, parsed.rows)
-        : null;
+      const preview = await previewImport(db, userId, parsed.rows);
+      // The invoices the user already has plus the new ones must fit in the limit; a dry run
+      // reports the same refusal as the real import. Checked before anything is written.
+      if (
+        (await countInvoices(db, userId)) + preview.invoicesCreated >
+        MAX_INVOICES_PER_USER
+      ) {
+        sendError(
+          res,
+          422,
+          'INVOICE_LIMIT_REACHED',
+          'The limit of invoices per account has been reached',
+          { limit: MAX_INVOICES_PER_USER },
+        );
+        return;
+      }
+      const dryRunResult = dryRun ? preview : null;
       const counts =
         dryRunResult ?? (await importInvoices(db, userId, parsed.rows));
 

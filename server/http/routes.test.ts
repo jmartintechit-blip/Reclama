@@ -15,7 +15,11 @@ import type { RateLimiter } from '../db/rate-limits.ts';
 import { errorHandler, sendError } from '../middleware/errors.ts';
 import { requestId } from '../middleware/request-id.ts';
 import { close, listen } from '../test-utils.ts';
-import { createRouteRegistry, getRegisteredRoutes } from './routes.ts';
+import {
+  createRouteRegistry,
+  getRegisteredRoutes,
+  ipKeyPart,
+} from './routes.ts';
 
 // A stand-in for the session step: lets a request through only if it sends "x-test-session".
 const fakeSession: RequestHandler = (req, res, next) => {
@@ -327,5 +331,40 @@ describe('defineRoute with a rateLimit', () => {
     expect(res.status).toBe(500);
     expect(limited).not.toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+});
+
+describe('ipKeyPart', () => {
+  it('leaves an IPv4 address and anything that is not an IPv6 address as it is', () => {
+    expect(ipKeyPart('10.0.0.2')).toBe('10.0.0.2');
+    expect(ipKeyPart('203.0.113.250')).toBe('203.0.113.250');
+    expect(ipKeyPart('unknown')).toBe('unknown');
+  });
+
+  it('gives the same key to every address of one /64 and another key to another /64', () => {
+    const key = ipKeyPart('2001:db8:1:2::1');
+
+    expect(ipKeyPart('2001:db8:1:2:aaaa:bbbb:cccc:dddd')).toBe(key);
+    expect(ipKeyPart('2001:0DB8:0001:0002:0:0:0:ffff')).toBe(key);
+    expect(ipKeyPart('2001:db8:1:3::1')).not.toBe(key);
+    expect(ipKeyPart('2001:db8:2:2::1')).not.toBe(key);
+    expect(key).toBe('2001:0db8:0001:0002::/64');
+  });
+
+  it('expands :: correctly, also at the start, at the end and with a zone id', () => {
+    expect(ipKeyPart('::1')).toBe('0000:0000:0000:0000::/64');
+    expect(ipKeyPart('2001:db8::')).toBe('2001:0db8:0000:0000::/64');
+    expect(ipKeyPart('fe80::1%eth0')).toBe(ipKeyPart('fe80::2'));
+    expect(ipKeyPart('2001:db8:0:0:5::1')).toBe('2001:0db8:0000:0000::/64');
+    expect(ipKeyPart('2001:db8:0:5::1')).toBe('2001:0db8:0000:0005::/64');
+  });
+
+  it('treats an IPv4-mapped IPv6 address as that IPv4 address', () => {
+    expect(ipKeyPart('::ffff:1.2.3.4')).toBe('1.2.3.4');
+    expect(ipKeyPart('::FFFF:1.2.3.4')).toBe('1.2.3.4');
+  });
+
+  it('handles an IPv4 tail in other IPv6 addresses', () => {
+    expect(ipKeyPart('64:ff9b::1.2.3.4')).toBe('0064:ff9b:0000:0000::/64');
   });
 });

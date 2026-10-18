@@ -38,3 +38,11 @@ export async function findSessionUser(
 export async function deleteSession(db: Db, tokenHash: Buffer): Promise<void> {
   await db.query('delete from sessions where token_hash = $1', [tokenHash]);
 }
+
+// Removes every session that has expired (the same rule as findSessionUser: expiring exactly at
+// `now` counts as expired), for all users. `now` comes from the injected clock.
+export async function deleteExpiredSessions(db: Db, now: Date): Promise<void> {
+  await db.query('delete from sessions where expires_at <= $1', [
+    now.toISOString(),
+  ]);
+}

@@ -1,4 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { MAX_INVOICES_PER_USER } from '../db/invoices.ts';
+import { hashKeyPart } from '../db/rate-limits.ts';
 import { putInClaim } from '../db/test-fixtures.ts';
 import {
   errorOf,
@@ -60,6 +62,19 @@ const pay = (
     paid_on: paidOn,
     amount_cents: cents,
   });
+
+// Stored payments above the invoice amount cannot be created any more: a database trigger refuses
+// them. The tests of how the API copes with such data (for example, rows written before the
+// trigger existed) switch the trigger off for the insert and back on right after.
+async function insertOverpaid(userId: string, invoiceId: string) {
+  await t.db.query('alter table payments disable trigger payments_check_total');
+  await t.db.query(
+    `insert into payments (user_id, invoice_id, paid_on, amount_cents)
+     values ($1, $2, '2026-10-01', 100000), ($1, $2, '2026-10-02', 5)`,
+    [userId, invoiceId],
+  );
+  await t.db.query('alter table payments enable trigger payments_check_total');
+}
 
 const get = async (user: TestUser, id: string) =>
   invoiceOf(await t.call(user, 'GET', `/api/invoices/${id}`));
@@ -1104,11 +1119,7 @@ describe('GET /api/invoices/:id/interest', () => {
   it('answers 422 CALCULATION_FAILED when the stored payments exceed the invoice', async () => {
     const user = await t.makeUser();
     const invoice = await create(user);
-    await t.db.query(
-      `insert into payments (user_id, invoice_id, paid_on, amount_cents)
-       values ($1, $2, '2026-10-01', 100000), ($1, $2, '2026-10-02', 5)`,
-      [user.id, invoice.id],
-    );
+    await insertOverpaid(user.id, invoice.id);
 
     const res = await t.call(
       user,
@@ -1440,11 +1451,7 @@ describe('GET /api/invoices with statuses and a failing invoice', () => {
     const user = await t.makeUser();
     const good = await create(user, { number: 'GOOD' });
     const overpaid = await create(user, { number: 'OVERPAID' });
-    await t.db.query(
-      `insert into payments (user_id, invoice_id, paid_on, amount_cents)
-       values ($1, $2, '2026-10-01', 100000), ($1, $2, '2026-10-02', 5)`,
-      [user.id, overpaid.id],
-    );
+    await insertOverpaid(user.id, overpaid.id);
     await t.db.query(
       `insert into invoices (user_id, debtor_id, number, issue_date, amount_cents)
        values ($1, $2, 'FAR', '9999-12-31', 100000)`,
@@ -1479,7 +1486,7 @@ describe('GET /api/invoices with statuses and a failing invoice', () => {
 });
 
 describe('GET /api/invoices totals cap', () => {
-  it('sums at most the first 5.000 invoices and says so with truncated', async () => {
+  it('sums at most the first 2.000 invoices and says so with truncated', async () => {
     const user = await t.makeUser();
     const first = await create(user, { amount_cents: 1_000 });
     // Newer than the first invoice, so they come first in the list and fill the cap.
@@ -1500,7 +1507,7 @@ describe('GET /api/invoices totals cap', () => {
     expect(over.page.total).toBe(TOTALS_ROW_CAP + 1);
     expect(over.totals).toMatchObject({
       count: TOTALS_ROW_CAP + 1,
-      outstanding_cents: TOTALS_ROW_CAP * 1_000, // the 5.001st invoice is not in the sum
+      outstanding_cents: TOTALS_ROW_CAP * 1_000, // the 2.001st invoice is not in the sum
       truncated: true,
     });
     expect(exact.totals).toMatchObject({
@@ -1508,5 +1515,83 @@ describe('GET /api/invoices totals cap', () => {
       outstanding_cents: TOTALS_ROW_CAP * 1_000,
       truncated: false,
     });
+  }, 60_000);
+});
+
+describe('invoice limit per user', () => {
+  it('refuses the invoice after the limit with INVOICE_LIMIT_REACHED, creating nothing', async () => {
+    const user = await t.makeUser();
+    const first = await create(user, { number: 'A-0' });
+    // Everything but one place is taken (written straight to the database).
+    await t.db.query(
+      `insert into invoices (user_id, debtor_id, number, issue_date, amount_cents)
+       select $1, $2, 'A-' || g, '2026-01-01', 1000 from generate_series(1, $3::int) g`,
+      [user.id, first.debtor_id, MAX_INVOICES_PER_USER - 2],
+    );
+
+    const last = await t.call(user, 'POST', '/api/invoices', {
+      ...BASE,
+      number: 'LAST',
+    });
+    const over = await t.call(user, 'POST', '/api/invoices', {
+      ...BASE,
+      number: 'OVER',
+      debtor: { name: 'Brand new debtor' },
+    });
+
+    expect(last.status).toBe(201);
+    expect(over.status).toBe(422);
+    expect(errorOf(over)).toMatchObject({
+      code: 'INVOICE_LIMIT_REACHED',
+      details: { limit: MAX_INVOICES_PER_USER },
+    });
+    expect(await count('invoices', user)).toBe(MAX_INVOICES_PER_USER);
+    expect(await count('debtors', user)).toBe(1); // the refused request did not create its debtor
+    // The limit is per user.
+    const other = await t.makeUser();
+    expect((await t.call(other, 'POST', '/api/invoices', BASE)).status).toBe(
+      201,
+    );
+  }, 60_000);
+});
+
+describe('write rate limit', () => {
+  it('allows 120 writes per hour per user, shared by all the write routes, and not for reads', async () => {
+    const user = await t.makeUser();
+    const other = await t.makeUser();
+
+    for (let i = 0; i < 120; i += 1) {
+      const res = await t.call(user, 'DELETE', `/api/invoices/${MISSING_ID}`);
+      expect(res.status, String(i)).toBe(404);
+    }
+
+    const blocked = [
+      await t.call(user, 'DELETE', `/api/invoices/${MISSING_ID}`),
+      await t.call(user, 'POST', '/api/invoices', BASE),
+      await t.call(user, 'PATCH', `/api/invoices/${MISSING_ID}`, {
+        number: 'X',
+      }),
+      await t.call(user, 'POST', `/api/invoices/${MISSING_ID}/payments`, {
+        paid_on: '2026-10-01',
+        amount_cents: 1,
+      }),
+      await t.call(user, 'PATCH', `/api/debtors/${MISSING_ID}`, {
+        kind: 'BUSINESS',
+      }),
+    ];
+    expect(blocked.map((res) => res.status)).toEqual([429, 429, 429, 429, 429]);
+    expect(errorOf(blocked[0] as Answer).code).toBe('RATE_LIMITED');
+    expect(Number(blocked[0]?.headers.get('retry-after'))).toBeGreaterThan(0);
+    // Reads are not limited, and another user has their own counter.
+    expect((await t.call(user, 'GET', '/api/invoices')).status).toBe(200);
+    expect((await t.call(other, 'POST', '/api/invoices', BASE)).status).toBe(
+      201,
+    );
+    // The key holds a hash of the user id, never the id itself.
+    const { rows } = await t.db.query(
+      'select key from rate_limits where key = $1',
+      [`write:${hashKeyPart(user.id)}`],
+    );
+    expect(rows).toHaveLength(1);
   }, 60_000);
 });

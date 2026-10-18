@@ -47,6 +47,19 @@ export class PaymentExceedsBalanceError extends Error {
   }
 }
 
+// The database trigger (a check violation) that refuses a lowering of the amount below what has
+// already been paid. The API validates it first; this is the backstop for a payment that lands
+// between that check and the update.
+export class InvoiceAmountBelowPaidError extends Error {
+  readonly code = 'AMOUNT_BELOW_PAID';
+  readonly paidCents: Cents;
+  constructor(paidCents: Cents) {
+    super('The amount is below what has already been paid');
+    this.name = 'InvoiceAmountBelowPaidError';
+    this.paidCents = paidCents;
+  }
+}
+
 // Postgres error codes. Both pg and PGlite put them in `error.code`, and the name of the
 // violated constraint in `error.constraint`.
 export const UNIQUE_VIOLATION = '23505';
@@ -58,6 +71,10 @@ export const INVOICE_DATES_CHECK = 'invoices_check';
 export const INVOICE_DEBTOR_FK = 'invoices_user_id_debtor_id_fkey';
 export const INVOICE_NUMBER_UNIQUE = 'invoices_user_id_debtor_id_number_key';
 export const CLAIM_INVOICE_FK = 'claim_invoices_user_id_invoice_id_fkey';
+
+// Names given by the triggers of the payment guard migration to the check violations they raise.
+export const PAYMENT_TOTAL_CHECK = 'payments_total_within_invoice';
+export const INVOICE_AMOUNT_CHECK = 'invoices_amount_covers_payments';
 
 // Matching the constraint name too, so an unrelated violation is never mistaken for the one
 // we expect (it is rethrown and ends as a 500, not as a wrong business answer).
