@@ -61,6 +61,9 @@ const REQUESTS: Record<string, (ids: Ids) => Request> = {
   'GET /api/claims/:id': ({ claimId }) => ({
     path: `/api/claims/${claimId}`,
   }),
+  'DELETE /api/claims/:id': ({ claimId }) => ({
+    path: `/api/claims/${claimId}`,
+  }),
   'GET /api/claims/:id/letter.pdf': ({ claimId }) => ({
     path: `/api/claims/${claimId}/letter.pdf`,
   }),

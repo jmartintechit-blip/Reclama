@@ -818,6 +818,60 @@ describe('the invoices of a claim are locked', () => {
   });
 });
 
+describe('DELETE /api/claims/:id', () => {
+  it('cancels the claim with its steps, even after a step was sent, and frees its invoices for a new claim', async () => {
+    const user = await t.makeUser();
+    const { debtorId, a } = await setup(user);
+    const first = await claimOK(user, {
+      debtor_id: debtorId,
+      invoice_ids: [a.id],
+    });
+    const event = await t.call(user, 'POST', `/api/claims/${first.id}/events`, {
+      kind: 'DEMAND_SENT',
+      occurred_on: '2026-10-30',
+    });
+    expect(event.status, event.text).toBe(201);
+
+    const del = await t.call(user, 'DELETE', `/api/claims/${first.id}`);
+
+    expect(del.status, del.text).toBe(204);
+    expect((await t.call(user, 'GET', `/api/claims/${first.id}`)).status).toBe(
+      404,
+    );
+    expect(await count('claims', user)).toBe(0);
+    expect(await count('claim_invoices', user)).toBe(0);
+    expect(await count('claim_events', user)).toBe(0);
+    // The invoice can be edited and claimed again.
+    const patched = await t.call(user, 'PATCH', `/api/invoices/${a.id}`, {
+      amount_cents: 90_000,
+    });
+    expect(patched.status, patched.text).toBe(200);
+    await claimOK(user, { debtor_id: debtorId, invoice_ids: [a.id] });
+  });
+
+  it('answers 404 for a missing, malformed or foreign id, and a foreign claim is untouched', async () => {
+    const owner = await t.makeUser();
+    const other = await t.makeUser();
+    const { debtorId, a } = await setup(owner);
+    const mine = await claimOK(owner, {
+      debtor_id: debtorId,
+      invoice_ids: [a.id],
+    });
+
+    for (const id of [
+      '00000000-0000-4000-8000-000000000000',
+      'not-an-id',
+      mine.id,
+    ]) {
+      const res = await t.call(other, 'DELETE', `/api/claims/${id}`);
+      expect(res.status, id).toBe(404);
+    }
+    expect((await t.call(owner, 'GET', `/api/claims/${mine.id}`)).status).toBe(
+      200,
+    );
+  });
+});
+
 describe('GET /api/claims', () => {
   it('lists the claims newest date first with debtor, totals, invoice count and last event, paginated', async () => {
     const user = await t.makeUser();

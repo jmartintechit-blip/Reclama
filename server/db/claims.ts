@@ -306,6 +306,20 @@ export async function listClaimedInvoiceIds(
   );
 }
 
+// Cancels a claim: its lines and events go with it (cascade), and its invoices are free again.
+// False when the claim does not exist or is not the user's.
+export async function deleteClaim(
+  db: Db,
+  userId: string,
+  claimId: string,
+): Promise<boolean> {
+  const { rows } = await db.query(
+    'delete from claims where user_id = $1 and id = $2 returning id',
+    [userId, claimId],
+  );
+  return rows.length > 0;
+}
+
 export async function countEvents(
   db: Db,
   userId: string,

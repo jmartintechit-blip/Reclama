@@ -6,6 +6,7 @@ import {
   countClaims,
   countEvents,
   createClaim,
+  deleteClaim,
   EVENT_KINDS,
   getClaim,
   getClaimHeader,
@@ -386,6 +387,25 @@ export function registerClaimRoutes(
           },
         },
       });
+    },
+  });
+
+  // Cancelling is allowed even after steps were recorded: a claim whose numbers went stale (a
+  // payment arrived, the debtor changed) must be replaceable, and the only way to a new one is to
+  // free its invoices. The interface asks for confirmation first.
+  defineRoute({
+    method: 'DELETE',
+    path: '/api/claims/:id',
+    rateLimit: WRITE_RATE_LIMIT,
+    handler: async ({ req, res, session }) => {
+      const id = idParam(req.params.id);
+      const deleted =
+        id === null ? false : await deleteClaim(db, session.user.id, id);
+      if (!deleted) {
+        sendNotFound(res);
+        return;
+      }
+      res.status(204).end();
     },
   });
 
