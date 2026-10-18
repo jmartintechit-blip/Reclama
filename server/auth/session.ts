@@ -12,8 +12,9 @@ export const SESSION_COOKIE = '__Host-sid';
 
 // Absolute lifetime: a session ends 7 days after it was created, however often it is used
 // (no sliding renewal). A stolen cookie therefore stops working by itself. The demo sandbox
-// (T27) will create shorter sessions.
+// passes a shorter lifetime.
 export const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+export const DEMO_SESSION_LIFETIME_MS = 2 * 60 * 60 * 1000;
 
 const TOKEN_BYTES = 32; // 256 bits from the OS random generator: impossible to guess
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/; // 32 bytes in base64url
@@ -56,20 +57,20 @@ const COOKIE_OPTIONS = {
   path: '/',
 } as const;
 
-// A new token for every call: login never reuses a token (session fixation).
+// A new token for every call: login never reuses a token (session fixation). Returns the moment
+// the session ends.
 export async function startSession(
   db: Db,
   clock: Clock,
   res: Response,
   userId: string,
-): Promise<void> {
+  lifetimeMs = SESSION_LIFETIME_MS,
+): Promise<Date> {
   const token = generateToken();
-  const expiresAt = new Date(clock.now().getTime() + SESSION_LIFETIME_MS);
+  const expiresAt = new Date(clock.now().getTime() + lifetimeMs);
   await createSession(db, hashToken(token), userId, expiresAt);
-  res.cookie(SESSION_COOKIE, token, {
-    ...COOKIE_OPTIONS,
-    maxAge: SESSION_LIFETIME_MS,
-  });
+  res.cookie(SESSION_COOKIE, token, { ...COOKIE_OPTIONS, maxAge: lifetimeMs });
+  return expiresAt;
 }
 
 // The attributes must match the ones used to set the cookie, or the browser ignores the removal.

@@ -13,6 +13,7 @@ import { createRouteRegistry } from './http/routes.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerClaimRoutes } from './routes/claims.ts';
 import { registerDebtorRoutes } from './routes/debtors.ts';
+import { registerDemoRoutes } from './routes/demo.ts';
 import { registerEmailRoute } from './routes/email.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import {
@@ -74,6 +75,7 @@ export function createApp({
   );
   registerHealthRoutes(defineRoute, db);
   registerAuthRoutes(defineRoute, { db: sessionDb, clock });
+  registerDemoRoutes(defineRoute, { db: sessionDb, clock });
   registerMeRoutes(defineRoute, { db: sessionDb });
   registerImportRoutes(defineRoute, { db: sessionDb });
   registerRateRoutes(defineRoute, { db: sessionDb });

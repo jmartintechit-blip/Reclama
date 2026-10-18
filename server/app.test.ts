@@ -110,13 +110,14 @@ describe('createApp', () => {
 });
 
 describe('the route registry of createApp', () => {
-  it('lists every route with its auth, and only health, the auth entry points and the rates are public', () => {
+  it('lists every route with its auth, and only health, the auth and demo entry points and the rates are public', () => {
     expect(getRegisteredRoutes(createApp())).toEqual([
       { method: 'GET', path: '/api/health', auth: 'public' },
       { method: 'GET', path: '/api/health/ready', auth: 'public' },
       { method: 'POST', path: '/api/auth/register', auth: 'public' },
       { method: 'POST', path: '/api/auth/login', auth: 'public' },
       { method: 'POST', path: '/api/auth/logout', auth: 'session' },
+      { method: 'POST', path: '/api/demo/session', auth: 'public' },
       { method: 'GET', path: '/api/me', auth: 'session' },
       { method: 'PATCH', path: '/api/me/profile', auth: 'session' },
       { method: 'DELETE', path: '/api/me', auth: 'session' },
@@ -146,8 +147,8 @@ describe('the route registry of createApp', () => {
     const first = createApp();
     const second = createApp();
 
-    expect(getRegisteredRoutes(first)).toHaveLength(27);
-    expect(getRegisteredRoutes(second)).toHaveLength(27);
+    expect(getRegisteredRoutes(first)).toHaveLength(28);
+    expect(getRegisteredRoutes(second)).toHaveLength(28);
   });
 });
 

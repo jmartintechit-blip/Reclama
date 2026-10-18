@@ -1,5 +1,6 @@
-// The IDOR matrix. User A owns a debtor, an invoice, a payment and a claim; user B calls EVERY registered
-// route that has a path parameter, with every method it supports, using A's ids. Each call must
+// The IDOR matrix. User A owns a debtor, an invoice, a payment and a claim; user B (once a regular
+// user and once a demo user) calls EVERY registered route that has a path parameter, with every
+// method it supports, using A's ids. Each call must
 // answer 404 (what B sees is the same as for an id that does not exist), must show nothing of A
 // and must leave A's data exactly as it was.
 //
@@ -95,11 +96,13 @@ const MARKERS = [
 let t: TestApp;
 let a: TestUser;
 let b: TestUser;
+let demo: TestUser;
 beforeAll(async () => {
   // A fake mailer: the owner's own email must go through (the sandbox sends it to the test inbox).
   t = await startTestApp({ mailer: createFakeMailer() });
   a = await t.makeUser();
   b = await t.makeUser();
+  demo = await t.makeDemoUser();
   // The letter needs the business data of the sender: A, the owner, must be able to get her PDF.
   const profile = await t.call(a, 'PATCH', '/api/me/profile', {
     business_name: 'Estudio Ficticio S.L.',
@@ -206,7 +209,7 @@ describe('the IDOR matrix of the real app', () => {
   it.each(
     routesWithParams.map((route) => ({ key: describeRoute(route), route })),
   )(
-    '$key: B gets 404 with nothing of A, and A keeps her data',
+    '$key: B, regular or demo, gets 404 with nothing of A, and A keeps her data',
     async ({ key, route }) => {
       const build = REQUESTS[key];
       if (!build) throw new Error(`No IDOR request for ${key}`);
@@ -214,23 +217,31 @@ describe('the IDOR matrix of the real app', () => {
       const before = await snapshotOfA();
       const { path, body, headers } = build(ids);
 
-      const attack = await t.call(b, route.method, path, body, headers);
+      for (const attacker of [b, demo]) {
+        const attack = await t.call(
+          attacker,
+          route.method,
+          path,
+          body,
+          headers,
+        );
 
-      expect(attack.status, attack.text).toBe(404);
-      expect(errorOf(attack)).toMatchObject({
-        code: 'NOT_FOUND',
-        message: 'Not found',
-      });
-      for (const marker of [
-        ...MARKERS,
-        ids.invoiceId,
-        ids.debtorId,
-        ids.paymentId,
-        ids.claimId,
-      ]) {
-        expect(attack.text).not.toContain(marker);
+        expect(attack.status, attack.text).toBe(404);
+        expect(errorOf(attack)).toMatchObject({
+          code: 'NOT_FOUND',
+          message: 'Not found',
+        });
+        for (const marker of [
+          ...MARKERS,
+          ids.invoiceId,
+          ids.debtorId,
+          ids.paymentId,
+          ids.claimId,
+        ]) {
+          expect(attack.text).not.toContain(marker);
+        }
+        expect(await snapshotOfA()).toEqual(before);
       }
-      expect(await snapshotOfA()).toEqual(before);
 
       // The request itself is well formed: A, the owner, is served by the same route.
       const own = await t.call(a, route.method, path, body, headers);
@@ -254,7 +265,7 @@ describe('the IDOR matrix of the real app', () => {
         claimId: junk,
       });
 
-      for (const user of [a, b]) {
+      for (const user of [a, b, demo]) {
         const res = await t.call(user, route.method, path, body, headers);
         expect(res.status, res.text).toBe(404);
         expect(errorOf(res).code).toBe('NOT_FOUND');

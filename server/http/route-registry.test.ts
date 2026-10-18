@@ -12,6 +12,7 @@ const PUBLIC_ROUTES = [
   'GET /api/rates',
   'POST /api/auth/login',
   'POST /api/auth/register',
+  'POST /api/demo/session',
 ];
 
 const DUMMY_UUID = '00000000-0000-4000-8000-000000000000';

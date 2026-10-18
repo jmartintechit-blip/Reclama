@@ -18,8 +18,10 @@ export async function createSession(
   );
 }
 
-// A session that expires exactly at `now` is already expired. `now` comes from the injected
-// clock, never from the database, so tests can move time.
+// A session that expires exactly at `now` is already expired. A demo user expires on its own
+// (users.expires_at), whatever its session says, and gets the same refusal; nothing is deleted
+// here (the demo cleanup does that). `now` comes from the injected clock, never from the
+// database, so tests can move time.
 export async function findSessionUser(
   db: Db,
   tokenHash: Buffer,
@@ -28,7 +30,8 @@ export async function findSessionUser(
   const { rows } = await db.query(
     `select u.id, u.email, u.is_demo
        from sessions s join users u on u.id = s.user_id
-      where s.token_hash = $1 and s.expires_at > $2`,
+      where s.token_hash = $1 and s.expires_at > $2
+        and (u.expires_at is null or u.expires_at > $2)`,
     [tokenHash, now.toISOString()],
   );
   return (rows[0] as SessionUser | undefined) ?? null;

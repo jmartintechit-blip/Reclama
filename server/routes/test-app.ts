@@ -4,13 +4,20 @@ import { readFileSync } from 'node:fs';
 import type { Express } from 'express';
 import { createApp } from '../app.ts';
 import type { EmailConfig } from '../config.ts';
-import { generateToken, hashToken, SESSION_COOKIE } from '../auth/session.ts';
+import {
+  DEMO_SESSION_LIFETIME_MS,
+  generateToken,
+  hashToken,
+  SESSION_COOKIE,
+} from '../auth/session.ts';
 import type { Db } from '../db/client.ts';
 import { seedRates } from '../db/rates-seed.ts';
+import { createDemoUser } from '../db/demo.ts';
 import { createSession } from '../db/sessions.ts';
 import { createTestDb, type TestDb } from '../db/test-db.ts';
 import { createUserWithProfile } from '../db/users.ts';
-import type { Clock } from '../domain/dates.ts';
+import { todayMadrid, type Clock } from '../domain/dates.ts';
+import { buildDemoData } from '../domain/demo-data.ts';
 import { parseRates } from '../domain/rates.ts';
 import type { Mailer } from '../services/mailer.ts';
 import { close, listen } from '../test-utils.ts';
@@ -97,6 +104,7 @@ export interface TestApp {
   baseUrl: string;
   setNow(iso: string): void;
   makeUser(): Promise<TestUser>;
+  makeDemoUser(): Promise<TestUser>; // with the data of the demo, as the demo endpoint seeds it
   call(
     user: TestUser | null,
     method: string,
@@ -160,6 +168,22 @@ export async function startTestApp({
         new Date(nowMs + DAY_MS),
       );
       return { id: user.id, cookie: `${SESSION_COOKIE}=${token}` };
+    },
+    async makeDemoUser() {
+      const today = todayMadrid({ now: () => new Date(nowMs) });
+      const { id } = await createDemoUser(
+        db,
+        new Date(nowMs + DAY_MS),
+        buildDemoData(today),
+      );
+      const token = generateToken();
+      await createSession(
+        db,
+        hashToken(token),
+        id,
+        new Date(nowMs + DEMO_SESSION_LIFETIME_MS),
+      );
+      return { id, cookie: `${SESSION_COOKIE}=${token}` };
     },
     async call(user, method, path, body, headers) {
       const res = await fetch(`${baseUrl}${path}`, {
