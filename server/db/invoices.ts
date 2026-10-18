@@ -164,6 +164,20 @@ export async function listInvoicesUpTo(
   return rows as Invoice[];
 }
 
+// The user's invoices among `invoiceIds`, same order as listInvoices. An id that does not exist or
+// belongs to someone else simply does not come back (user_id is in the condition).
+export async function listInvoicesByIds(
+  db: Db,
+  userId: string,
+  invoiceIds: readonly string[],
+): Promise<Invoice[]> {
+  const { rows } = await db.query(
+    `select ${COLUMNS} from invoices where user_id = $1 and id = any($2::uuid[]) ${LIST_ORDER}`,
+    [userId, invoiceIds],
+  );
+  return rows as Invoice[];
+}
+
 export async function getInvoice(
   db: Db,
   userId: string,

@@ -1,4 +1,4 @@
-// The IDOR matrix. User A owns a debtor, an invoice and a payment; user B calls EVERY registered
+// The IDOR matrix. User A owns a debtor, an invoice, a payment and a claim; user B calls EVERY registered
 // route that has a path parameter, with every method it supports, using A's ids. Each call must
 // answer 404 (what B sees is the same as for an id that does not exist), must show nothing of A
 // and must leave A's data exactly as it was.
@@ -21,6 +21,7 @@ interface Ids {
   debtorId: string;
   invoiceId: string;
   paymentId: string;
+  claimId: string;
 }
 
 interface Request {
@@ -55,6 +56,13 @@ const REQUESTS: Record<string, (ids: Ids) => Request> = {
   'GET /api/invoices/:id/interest': ({ invoiceId }) => ({
     path: `/api/invoices/${invoiceId}/interest`,
   }),
+  'GET /api/claims/:id': ({ claimId }) => ({
+    path: `/api/claims/${claimId}`,
+  }),
+  'POST /api/claims/:id/events': ({ claimId }) => ({
+    path: `/api/claims/${claimId}/events`,
+    body: { kind: 'NOTE', occurred_on: '2026-10-30', note: 'attacker note' },
+  }),
 };
 
 const describeRoute = ({ method, path }: RegisteredRoute) =>
@@ -84,7 +92,8 @@ afterAll(async () => {
   await t.stop();
 });
 
-// A fresh debtor, invoice and payment of A for each request (a DELETE would use one up).
+// A fresh debtor, invoice, payment and claim of A for each request (a DELETE would use one up).
+// The claim has an invoice of its own, so the invoice routes above can still edit and delete theirs.
 async function makeFixture(): Promise<Ids> {
   const created = await t.call(a, 'POST', '/api/invoices', {
     debtor: {
@@ -105,20 +114,53 @@ async function makeFixture(): Promise<Ids> {
   });
   expect(paid.status, paid.text).toBe(201);
   const { payment } = (paid.json as { data: { payment: { id: string } } }).data;
+
+  const business = await t.call(
+    a,
+    'PATCH',
+    `/api/debtors/${invoice.debtor_id}`,
+    {
+      kind: 'BUSINESS',
+    },
+  );
+  expect(business.status, business.text).toBe(200);
+  const claimed = await t.call(a, 'POST', '/api/invoices', {
+    debtor_id: invoice.debtor_id,
+    number: `MARKER-INV-77-${String(Math.random()).slice(2, 10)}`,
+    issue_date: '2026-08-31',
+    due_date: '2026-09-30',
+    amount_cents: 7_654_321,
+  });
+  expect(claimed.status, claimed.text).toBe(201);
+  const claim = await t.call(a, 'POST', '/api/claims', {
+    debtor_id: invoice.debtor_id,
+    invoice_ids: [invoiceOf(claimed).id],
+  });
+  expect(claim.status, claim.text).toBe(201);
+  const { id: claimId } = (claim.json as { data: { claim: { id: string } } })
+    .data.claim;
   return {
     debtorId: invoice.debtor_id,
     invoiceId: invoice.id,
     paymentId: payment.id,
+    claimId,
   };
 }
 
-// Every row of A in the three tables, in a stable order.
+// Every row of A in the tables that hold her data, in a stable order.
 async function snapshotOfA(): Promise<unknown[]> {
-  const tables = ['debtors', 'invoices', 'payments'];
+  const tables: [string, string][] = [
+    ['debtors', 'id'],
+    ['invoices', 'id'],
+    ['payments', 'id'],
+    ['claims', 'id'],
+    ['claim_invoices', 'claim_id, invoice_id'],
+    ['claim_events', 'id'],
+  ];
   const out: unknown[] = [];
-  for (const table of tables) {
+  for (const [table, order] of tables) {
     const { rows } = await t.db.query(
-      `select * from ${table} where user_id = $1 order by id`,
+      `select * from ${table} where user_id = $1 order by ${order}`,
       [a.id],
     );
     out.push(rows);
@@ -164,6 +206,7 @@ describe('the IDOR matrix of the real app', () => {
         ids.invoiceId,
         ids.debtorId,
         ids.paymentId,
+        ids.claimId,
       ]) {
         expect(attack.text).not.toContain(marker);
       }
@@ -188,6 +231,7 @@ describe('the IDOR matrix of the real app', () => {
         debtorId: junk,
         invoiceId: junk,
         paymentId: junk,
+        claimId: junk,
       });
 
       for (const user of [a, b]) {
@@ -239,17 +283,80 @@ describe('the routes without a path parameter', () => {
       await t.call(b, 'GET', '/api/invoices'),
       await t.call(b, 'GET', `/api/invoices?debtor_id=${ids.debtorId}`),
       await t.call(b, 'GET', '/api/debtors'),
+      await t.call(b, 'GET', '/api/claims'),
     ];
 
     for (const res of answers) {
       expect(res.status).toBe(200);
-      for (const marker of [...MARKERS, ids.invoiceId, ids.debtorId]) {
+      for (const marker of [
+        ...MARKERS,
+        ids.invoiceId,
+        ids.debtorId,
+        ids.claimId,
+      ]) {
         expect(res.text).not.toContain(marker);
       }
     }
     expect(answers[1]?.json).toMatchObject({
       data: { invoices: [], totals: { count: 0, outstanding_cents: 0 } },
     });
+    expect(answers[3]?.json).toEqual({
+      data: { claims: [], page: { limit: 50, offset: 0, total: 0 } },
+    });
+  });
+
+  it("does not let B claim A's debtor or A's invoices, and says the same as for ids that do not exist", async () => {
+    const ids = await makeFixture();
+    const before = await snapshotOfA();
+    const mine = await t.call(b, 'POST', '/api/invoices', {
+      debtor: { name: 'B-OWN S.L.' },
+      number: 'B-OWN',
+      issue_date: '2026-08-31',
+      due_date: '2026-09-30',
+      amount_cents: 1_000,
+    });
+    const own = invoiceOf(mine);
+    await t.call(b, 'PATCH', `/api/debtors/${own.debtor_id}`, {
+      kind: 'BUSINESS',
+    });
+    const missingId = '00000000-0000-4000-8000-000000000000';
+
+    const foreignDebtor = await t.call(b, 'POST', '/api/claims', {
+      debtor_id: ids.debtorId,
+    });
+    const missingDebtor = await t.call(b, 'POST', '/api/claims', {
+      debtor_id: missingId,
+    });
+    const foreignInvoice = await t.call(b, 'POST', '/api/claims', {
+      debtor_id: own.debtor_id,
+      invoice_ids: [own.id, ids.invoiceId],
+    });
+    const missingInvoice = await t.call(b, 'POST', '/api/claims', {
+      debtor_id: own.debtor_id,
+      invoice_ids: [own.id, missingId],
+    });
+
+    for (const [attack, missing, code] of [
+      [foreignDebtor, missingDebtor, 'DEBTOR_NOT_FOUND'],
+      [foreignInvoice, missingInvoice, 'INVOICE_NOT_FOUND'],
+    ] as const) {
+      expect(attack.status, attack.text).toBe(404);
+      expect(errorOf(attack).code).toBe(code);
+      expect(attack.json).toEqual({
+        error: {
+          ...errorOf(missing),
+          request_id: errorOf(attack).request_id,
+        },
+      });
+      expect(attack.text).not.toContain(ids.invoiceId);
+      expect(attack.text).not.toContain(ids.debtorId);
+    }
+    expect(await snapshotOfA()).toEqual(before);
+    const { rows } = await t.db.query(
+      'select count(*)::int as n from claims where user_id = $1',
+      [b.id],
+    );
+    expect(rows).toEqual([{ n: 0 }]);
   });
 
   it('creates B its own debtor, even with the same name and tax id as one of A', async () => {

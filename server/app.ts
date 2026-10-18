@@ -10,6 +10,7 @@ import { hitRateLimit } from './db/rate-limits.ts';
 import type { Clock } from './domain/dates.ts';
 import { createRouteRegistry } from './http/routes.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerClaimRoutes } from './routes/claims.ts';
 import { registerDebtorRoutes } from './routes/debtors.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import {
@@ -66,6 +67,7 @@ export function createApp({
   registerRateRoutes(defineRoute, { db: sessionDb });
   registerDebtorRoutes(defineRoute, { db: sessionDb });
   registerInvoiceRoutes(defineRoute, { db: sessionDb, clock });
+  registerClaimRoutes(defineRoute, { db: sessionDb, clock });
 
   // After all the routes: the not-found handler catches what no route matched,
   // and the error handler must be the last middleware to receive every error.

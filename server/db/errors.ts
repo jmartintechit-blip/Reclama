@@ -11,6 +11,14 @@ export class DebtorNotFoundError extends Error {
   }
 }
 
+export class InvoiceNotFoundError extends Error {
+  readonly code = 'INVOICE_NOT_FOUND';
+  constructor() {
+    super('Invoice not found');
+    this.name = 'InvoiceNotFoundError';
+  }
+}
+
 export class InvoiceDuplicateError extends Error {
   readonly code = 'INVOICE_DUPLICATE';
   constructor() {
@@ -71,6 +79,7 @@ export const INVOICE_DATES_CHECK = 'invoices_check';
 export const INVOICE_DEBTOR_FK = 'invoices_user_id_debtor_id_fkey';
 export const INVOICE_NUMBER_UNIQUE = 'invoices_user_id_debtor_id_number_key';
 export const CLAIM_INVOICE_FK = 'claim_invoices_user_id_invoice_id_fkey';
+export const CLAIM_DEBTOR_FK = 'claims_user_id_debtor_id_fkey';
 
 // Names given by the triggers of the payment guard migration to the check violations they raise.
 export const PAYMENT_TOTAL_CHECK = 'payments_total_within_invoice';

@@ -132,6 +132,10 @@ describe('the route registry of createApp', () => {
       { method: 'DELETE', path: '/api/invoices/:id', auth: 'session' },
       { method: 'POST', path: '/api/invoices/:id/payments', auth: 'session' },
       { method: 'GET', path: '/api/invoices/:id/interest', auth: 'session' },
+      { method: 'GET', path: '/api/claims', auth: 'session' },
+      { method: 'POST', path: '/api/claims', auth: 'session' },
+      { method: 'GET', path: '/api/claims/:id', auth: 'session' },
+      { method: 'POST', path: '/api/claims/:id/events', auth: 'session' },
     ]);
   });
 
@@ -139,8 +143,8 @@ describe('the route registry of createApp', () => {
     const first = createApp();
     const second = createApp();
 
-    expect(getRegisteredRoutes(first)).toHaveLength(20);
-    expect(getRegisteredRoutes(second)).toHaveLength(20);
+    expect(getRegisteredRoutes(first)).toHaveLength(24);
+    expect(getRegisteredRoutes(second)).toHaveLength(24);
   });
 });
 
