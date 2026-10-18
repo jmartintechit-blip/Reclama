@@ -2,6 +2,13 @@ import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 import { loadMigrations, runMigrations } from '../server/db/migrate.ts';
 
+// The database is shared by every build. A deploy preview of a pull request must not apply that
+// pull request's migrations to it before the change is merged.
+if (process.env.CONTEXT === 'deploy-preview') {
+  console.log('Deploy preview: migrations skipped');
+  process.exit(0);
+}
+
 const url = process.env.DATABASE_URL;
 // The value is a secret, so the message never includes it.
 if (!url?.startsWith('postgres://') && !url?.startsWith('postgresql://')) {
