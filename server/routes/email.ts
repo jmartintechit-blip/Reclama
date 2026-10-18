@@ -247,10 +247,15 @@ export function registerEmailRoute(
       }
 
       // Everything this request took (the key and the hits) is given back when nothing is sent.
+      // When the outcome is unknown (the provider timed out or failed on its side, so it may have
+      // accepted the email) the key is still released, so the client can retry with the same key
+      // and the provider's own idempotency stops a second email, but the hits stay used.
       const counted: RateLimitRule[] = [];
-      const giveBack = async () => {
+      const giveBack = async (refundHits = true) => {
         await releaseEmailKey(db, userId, sendKey);
-        for (const rule of counted) await refundRateLimit(db, clock, rule);
+        if (refundHits) {
+          for (const rule of counted) await refundRateLimit(db, clock, rule);
+        }
       };
 
       let retryAfterSeconds: number | null = null;
@@ -300,9 +305,14 @@ export function registerEmailRoute(
           idempotencyKey: sendKey,
         });
       } catch (error) {
-        // Nothing was sent: give the key and the hits back so the client can retry with the
-        // same key.
-        await giveBack();
+        // Nothing was sent (or, for an unavailable provider, nobody knows): give the key back so
+        // the client can retry with the same one.
+        await giveBack(
+          !(
+            error instanceof MailerError &&
+            error.code === 'PROVIDER_UNAVAILABLE'
+          ),
+        );
         if (error instanceof LetterDataError) {
           sendError(
             res,

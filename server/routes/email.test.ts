@@ -402,13 +402,13 @@ describe('POST /api/claims/:id/email with a fake mailer', () => {
     expect(await hitsOf(t, userLimitKey(user.id))).toEqual([1]);
   });
 
-  it('a provider failure gives the quota back, so failures do not use up the 3 emails of the day', async () => {
+  it('a definite provider failure gives the quota back, so failures do not use up the 3 emails of the day', async () => {
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
     try {
       const { user, claimId } = await setup(t);
-      mailer.failWith('PROVIDER_UNAVAILABLE');
+      mailer.failWith('PROVIDER_REJECTED');
 
       for (let i = 0; i < 5; i += 1) {
         const failed = await sendEmail(t, user, claimId);
@@ -424,6 +424,25 @@ describe('POST /api/claims/:id/email with a fake mailer', () => {
       }
       expect(await hitsOf(t, userLimitKey(user.id))).toEqual([3]);
       expect(await hitsOf(t, 'email-global')).toEqual([3]);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('an unavailable provider (outcome unknown) frees the key but keeps the quota spent', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const { user, claimId } = await setup(t);
+      mailer.failWith('PROVIDER_UNAVAILABLE');
+
+      const failed = await sendEmail(t, user, claimId);
+
+      expect(failed.status, failed.text).toBe(502);
+      expect(await hitsOf(t, userLimitKey(user.id))).toEqual([1]);
+      expect(await hitsOf(t, 'email-global')).toEqual([1]);
+      expect(await emailLogCount(t, user.id)).toBe(0); // the key is free for a retry
     } finally {
       consoleError.mockRestore();
     }
