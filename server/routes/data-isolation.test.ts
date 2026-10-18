@@ -59,6 +59,9 @@ const REQUESTS: Record<string, (ids: Ids) => Request> = {
   'GET /api/claims/:id': ({ claimId }) => ({
     path: `/api/claims/${claimId}`,
   }),
+  'GET /api/claims/:id/letter.pdf': ({ claimId }) => ({
+    path: `/api/claims/${claimId}/letter.pdf`,
+  }),
   'POST /api/claims/:id/events': ({ claimId }) => ({
     path: `/api/claims/${claimId}/events`,
     body: { kind: 'NOTE', occurred_on: '2026-10-30', note: 'attacker note' },
@@ -87,6 +90,13 @@ beforeAll(async () => {
   t = await startTestApp();
   a = await t.makeUser();
   b = await t.makeUser();
+  // The letter needs the business data of the sender: A, the owner, must be able to get her PDF.
+  const profile = await t.call(a, 'PATCH', '/api/me/profile', {
+    business_name: 'Estudio Ficticio S.L.',
+    tax_id: 'B12345674',
+    address: 'Calle de Ejemplo 12, Madrid',
+  });
+  expect(profile.status, profile.text).toBe(200);
 }, 30_000);
 afterAll(async () => {
   await t.stop();

@@ -19,6 +19,7 @@ import {
   registerImportRoutes,
 } from './routes/imports.ts';
 import { registerInvoiceRoutes } from './routes/invoices.ts';
+import { registerLetterRoute } from './routes/letter.ts';
 import { registerMeRoutes } from './routes/me.ts';
 import { registerRateRoutes } from './routes/rates.ts';
 
@@ -68,6 +69,7 @@ export function createApp({
   registerDebtorRoutes(defineRoute, { db: sessionDb });
   registerInvoiceRoutes(defineRoute, { db: sessionDb, clock });
   registerClaimRoutes(defineRoute, { db: sessionDb, clock });
+  registerLetterRoute(defineRoute, { db: sessionDb, clock });
 
   // After all the routes: the not-found handler catches what no route matched,
   // and the error handler must be the last middleware to receive every error.

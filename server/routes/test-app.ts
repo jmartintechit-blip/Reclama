@@ -32,7 +32,8 @@ export interface Answer {
   status: number;
   headers: Headers;
   text: string;
-  json: unknown; // undefined for an empty body (204)
+  bytes: Buffer; // the body as it came, for the PDF
+  json: unknown; // undefined for an empty body (204) and for a PDF
 }
 
 // The shapes the API sends, as the tests read them.
@@ -162,12 +163,15 @@ export async function startTestApp({
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
-      const text = await res.text();
+      const bytes = Buffer.from(await res.arrayBuffer());
+      const text = bytes.toString('utf8');
+      const isPdf = res.headers.get('content-type') === 'application/pdf';
       return {
         status: res.status,
         headers: res.headers,
         text,
-        json: text === '' ? undefined : (JSON.parse(text) as unknown),
+        bytes,
+        json: text === '' || isPdf ? undefined : (JSON.parse(text) as unknown),
       };
     },
     async stop() {

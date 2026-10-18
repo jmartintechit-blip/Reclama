@@ -54,6 +54,15 @@ export const WRITE_RATE_LIMIT: RateLimitSpec<unknown, Session> = {
   key: (_body, _ip, session) => hashKeyPart(session.user.id),
 };
 
+// Generating a PDF costs far more than reading a row, so it has its own counter per user (its own
+// name keeps it apart from the write counter).
+export const PDF_RATE_LIMIT: RateLimitSpec<unknown, Session> = {
+  name: 'letter-pdf',
+  limit: 60,
+  windowSeconds: 60 * 60,
+  key: (_body, _ip, session) => hashKeyPart(session.user.id),
+};
+
 // The caller's address as it is used in rate-limit keys. A person (or a botnet host) with an
 // IPv6 network owns at least a whole /64, so counting each address separately would give an
 // attacker billions of free counters: an IPv6 address is reduced to its /64 prefix. An IPv4
