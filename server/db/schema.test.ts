@@ -361,3 +361,28 @@ describe('right to erasure', () => {
     });
   });
 });
+
+describe('indexes on the columns the app filters or deletes by', () => {
+  it('exist for the foreign keys that Postgres does not index on its own', async () => {
+    const { rows } = await db.query(
+      `select indexname from pg_indexes
+        where schemaname = 'public' and indexname = any($1::text[])
+        order by indexname`,
+      [
+        [
+          'claim_events_claim_idx',
+          'payments_invoice_idx',
+          'rate_limits_window_start_idx',
+          'sessions_user_idx',
+        ],
+      ],
+    );
+
+    expect(rows.map((row) => row.indexname)).toEqual([
+      'claim_events_claim_idx',
+      'payments_invoice_idx',
+      'rate_limits_window_start_idx',
+      'sessions_user_idx',
+    ]);
+  });
+});
