@@ -47,6 +47,16 @@ export const errorHandler: ErrorRequestHandler = (
     sendError(res, 413, 'PAYLOAD_TOO_LARGE', 'Request body is too large');
     return;
   }
+  // The rest of what the body reader can raise is the client's fault, not ours. For example, a
+  // body with an invalid UTF-8 byte is re-encoded on its way through the Netlify adapter, so its
+  // length no longer matches Content-Length ("request.size.invalid"). Always a 400.
+  if (
+    typeof type === 'string' &&
+    /^(request|encoding|charset|stream.encoding)./.test(type)
+  ) {
+    sendError(res, 400, 'INVALID_BODY', 'Request body could not be read');
+    return;
+  }
 
   // Unexpected error: log only the request id and the error name. The message, the stack and
   // the request body can contain personal data, so they go neither to the log nor to the client.
