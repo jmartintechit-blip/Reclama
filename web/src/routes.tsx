@@ -1,24 +1,50 @@
 import type { RouteObject } from 'react-router';
 import { Layout } from './components/Layout.tsx';
+import { RedirectIfAuth, RequireAuth } from './components/Guards.tsx';
+import { SessionProvider } from './lib/session.tsx';
+import { Login, Register } from './pages/Auth.tsx';
 import { ComingSoon } from './pages/ComingSoon.tsx';
+import { Demo } from './pages/Demo.tsx';
 import { Home } from './pages/Home.tsx';
 import { Method } from './pages/Method.tsx';
 import { NotFound } from './pages/NotFound.tsx';
 import { Privacy } from './pages/Privacy.tsx';
+import { Profile } from './pages/Profile.tsx';
 
 // The screens that do not exist yet already have their real route: building one means replacing
-// its element.
+// its element. The session provider is the root route's element, inside the router, so a page
+// and its tests never need to wrap anything by hand.
 export const routes: RouteObject[] = [
   {
-    element: <Layout />,
+    element: (
+      <SessionProvider>
+        <Layout />
+      </SessionProvider>
+    ),
     children: [
       { index: true, element: <Home /> },
       { path: 'metodo', element: <Method /> },
       { path: 'privacidad', element: <Privacy /> },
-      { path: 'entrar', element: <ComingSoon screen="Entrar" /> },
-      { path: 'registro', element: <ComingSoon screen="Crear cuenta" /> },
-      { path: 'demo', element: <ComingSoon screen="Demo" /> },
-      { path: 'panel', element: <ComingSoon screen="Panel" /> },
+      { path: 'demo', element: <Demo /> },
+      {
+        element: <RedirectIfAuth />,
+        children: [
+          { path: 'entrar', element: <Login /> },
+          { path: 'registro', element: <Register /> },
+        ],
+      },
+      {
+        element: <RequireAuth />,
+        children: [
+          { path: 'panel', element: <ComingSoon screen="Facturas" /> },
+          { path: 'importar', element: <ComingSoon screen="Importar" /> },
+          {
+            path: 'reclamaciones',
+            element: <ComingSoon screen="Reclamaciones" />,
+          },
+          { path: 'perfil', element: <Profile /> },
+        ],
+      },
       { path: '*', element: <NotFound /> },
     ],
   },

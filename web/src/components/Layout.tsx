@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { useSession } from '../lib/session.tsx';
 
 export const REPO_URL = 'https://github.com/jmartintechit-blip/Reclama';
 
@@ -16,6 +17,9 @@ function Logo() {
 
 export function Layout() {
   const { pathname } = useLocation();
+  const { status, user, signOut } = useSession();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const main = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
 
@@ -29,6 +33,16 @@ export function Layout() {
     main.current?.focus();
   }, [pathname]);
 
+  // Once the session is cleared, a protected page sends the visitor home by itself (RequireAuth)
+  // and a public one stays where it is: nothing to navigate here.
+  async function leave() {
+    setSigningOut(true);
+    setSignOutFailed(false);
+    const done = await signOut();
+    setSigningOut(false);
+    setSignOutFailed(!done);
+  }
+
   return (
     <>
       <a className="skip" href="#contenido">
@@ -37,15 +51,56 @@ export function Layout() {
       <header className="bar">
         <div className="wrap">
           <Logo />
-          <nav aria-label="Principal">
-            <NavLink to="/metodo">Método</NavLink>
-            <NavLink to="/privacidad">Privacidad</NavLink>
-            <Link className="btn small" to="/entrar">
-              Entrar
-            </Link>
+          <nav aria-label="Principal" aria-busy={status === 'loading'}>
+            {status === 'authenticated' ? (
+              <>
+                <NavLink to="/panel">Facturas</NavLink>
+                <NavLink to="/importar">Importar</NavLink>
+                <NavLink to="/reclamaciones">Reclamaciones</NavLink>
+                <NavLink to="/perfil">Perfil</NavLink>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={signingOut}
+                  onClick={() => void leave()}
+                >
+                  Salir
+                </button>
+              </>
+            ) : (
+              <>
+                <NavLink to="/metodo">Método</NavLink>
+                <NavLink to="/privacidad">Privacidad</NavLink>
+                {/* While the session loads, no button: it could be the wrong one. */}
+                {status === 'loading' ? null : (
+                  <Link className="btn small" to="/entrar">
+                    Entrar
+                  </Link>
+                )}
+              </>
+            )}
           </nav>
         </div>
       </header>
+      {user?.is_demo ? (
+        <div className="banner">
+          <div className="wrap">
+            <p>
+              Modo demo: los datos son ficticios y se borran a las 24 horas.
+            </p>
+            <Link to="/registro">Crear mi cuenta</Link>
+          </div>
+        </div>
+      ) : null}
+      <div role="alert">
+        {signOutFailed ? (
+          <div className="banner error">
+            <div className="wrap">
+              <p>No hemos podido cerrar la sesión. Inténtalo de nuevo.</p>
+            </div>
+          </div>
+        ) : null}
+      </div>
       <main id="contenido" ref={main} tabIndex={-1}>
         <Outlet />
       </main>

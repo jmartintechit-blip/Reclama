@@ -9,6 +9,8 @@
   --ink: light-dark(#0f1b2d, #e9eef3);
   --muted: light-dark(#4a5a6b, #a3b1c0);
   --line: light-dark(#d2dbd7, #263548);
+  /* The edge of a form control must reach 3:1 against its background; --line is only a divider. */
+  --field-line: light-dark(#66768a, #8093a8);
   --accent: light-dark(#0b6b58, #5fd0b0);
   --accent-ink: light-dark(#ffffff, #0c141f);
   --accent-soft: color-mix(in oklab, var(--accent) 14%, var(--card));
