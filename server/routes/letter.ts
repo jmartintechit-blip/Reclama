@@ -3,6 +3,7 @@ import type { Db } from '../db/client.ts';
 import { getClaim, type ClaimDetail } from '../db/claims.ts';
 import { getDebtor, type Debtor } from '../db/debtors.ts';
 import { listInvoicesByIds } from '../db/invoices.ts';
+import { listPaymentsForInvoices } from '../db/payments.ts';
 import { getProfile, type Profile } from '../db/profile.ts';
 import { addDays, todayMadrid, type Clock } from '../domain/dates.ts';
 import { parseIban } from '../domain/iban.ts';
@@ -57,13 +58,15 @@ export function letterFilename(claim: ClaimDetail): string {
 }
 
 export type NotActionableReason =
-  'debtor_not_business' | 'marked_paid' | 'invoice_paid';
+  'debtor_not_business' | 'marked_paid' | 'invoice_paid' | 'invoice_changed';
 
 const NOT_ACTIONABLE_MESSAGES: Record<NotActionableReason, string> = {
   debtor_not_business:
     'The debtor is no longer a business, so a demand cannot be issued for this claim',
   marked_paid: 'The claim has been marked as paid',
   invoice_paid: 'An invoice of the claim has been paid since it was created',
+  invoice_changed:
+    'An invoice of the claim has received payments since it was created, so its amounts are out of date',
 };
 
 // A claim is frozen, but what the letter says ("you owe this") has to be true on the day it is
@@ -80,13 +83,32 @@ export async function notActionableReason(
     return 'debtor_not_business';
   }
   if (claim.events.some((event) => event.kind === 'PAID')) return 'marked_paid';
-  const invoices = await listInvoicesByIds(
-    db,
-    userId,
-    claim.lines.map((line) => line.invoice_id),
-  );
+  const ids = claim.lines.map((line) => line.invoice_id);
+  const invoices = await listInvoicesByIds(db, userId, ids);
   if (invoices.some((invoice) => invoice.status === 'PAID')) {
     return 'invoice_paid';
+  }
+  // A payment recorded after the claim was created leaves the frozen principal above what is
+  // still owed: the letter would demand money that has already been paid.
+  const paid = new Map<string, number>();
+  for (const payment of await listPaymentsForInvoices(db, userId, ids)) {
+    paid.set(
+      payment.invoice_id,
+      (paid.get(payment.invoice_id) ?? 0) + payment.amount_cents,
+    );
+  }
+  const owed = new Map(
+    invoices.map((invoice) => [
+      invoice.id,
+      invoice.amount_cents - (paid.get(invoice.id) ?? 0),
+    ]),
+  );
+  if (
+    claim.lines.some(
+      (line) => owed.get(line.invoice_id) !== line.principal_cents,
+    )
+  ) {
+    return 'invoice_changed';
   }
   return null;
 }
@@ -107,8 +129,8 @@ export async function buildLetterData(
   claim: ClaimDetail,
   profile: Profile,
   letterDate: LetterData['letterDate'],
+  debtor: Debtor | null,
 ): Promise<LetterData> {
-  const debtor = await getDebtor(db, userId, claim.debtor_id);
   const invoices = new Map(
     (
       await listInvoicesByIds(
@@ -189,12 +211,8 @@ export function registerLetterRoute(
         return;
       }
 
-      const reason = await notActionableReason(
-        db,
-        userId,
-        claim,
-        await getDebtor(db, userId, claim.debtor_id),
-      );
+      const debtor = await getDebtor(db, userId, claim.debtor_id);
+      const reason = await notActionableReason(db, userId, claim, debtor);
       if (reason !== null) {
         sendNotActionable(res, reason);
         return;
@@ -203,7 +221,14 @@ export function registerLetterRoute(
       let pdf: Buffer;
       try {
         pdf = await renderLetter(
-          await buildLetterData(db, userId, claim, profile, todayMadrid(clock)),
+          await buildLetterData(
+            db,
+            userId,
+            claim,
+            profile,
+            todayMadrid(clock),
+            debtor,
+          ),
         );
       } catch (error) {
         if (!(error instanceof LetterDataError)) throw error;

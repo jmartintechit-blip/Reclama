@@ -123,16 +123,13 @@ describe('GET /api/claims/:id/letter.pdf', () => {
     }
   });
 
-  it('keeps printing the numbers of the claim when the rates or the invoice change afterwards', async () => {
-    const { user, claimId, invoice } = await setup();
+  it('keeps printing the numbers of the claim when the rates change afterwards', async () => {
+    const { user, claimId } = await setup();
     const before = textOf(await letter(user, claimId));
     await t.db.query(
       `update legal_interest_rates set rate_bp = 2000, ecb_mro_bp = 1200
         where semester_start = '2026-07-01'`,
     );
-    await t.db.query('update invoices set amount_cents = 5 where id = $1', [
-      invoice.id,
-    ]);
     try {
       const after = await letter(user, claimId);
 
@@ -142,7 +139,6 @@ describe('GET /api/claims/:id/letter.pdf', () => {
       expect(text).not.toContain('20,00 %');
       expect(text).toContain('1.000,00 €');
       expect(text).toContain('8,55 €');
-      expect(text).not.toContain('0,05 €');
       expect(text).toBe(before);
     } finally {
       await t.db.query(
@@ -298,6 +294,28 @@ describe('GET /api/claims/:id/letter.pdf', () => {
       expect(paid.status, paid.text).toBe(201);
 
       await expectRefused(user, claimId, 'invoice_paid');
+    });
+
+    it('refuses with invoice_changed when the amount of an invoice of the claim changed', async () => {
+      const { user, claimId, invoice } = await setup();
+      await t.db.query('update invoices set amount_cents = 5 where id = $1', [
+        invoice.id,
+      ]);
+
+      await expectRefused(user, claimId, 'invoice_changed');
+    });
+
+    it('refuses with invoice_changed after a partial payment on an invoice of the claim', async () => {
+      const { user, claimId, invoice } = await setup();
+      const paid = await t.call(
+        user,
+        'POST',
+        `/api/invoices/${invoice.id}/payments`,
+        { paid_on: '2026-10-30', amount_cents: 40_000 },
+      );
+      expect(paid.status, paid.text).toBe(201);
+
+      await expectRefused(user, claimId, 'invoice_changed');
     });
 
     it('still gives the PDF while the debtor is a business and nothing is paid (control)', async () => {

@@ -277,7 +277,7 @@ export function registerEmailRoute(
       let sent: SendResult;
       try {
         const pdf = await renderLetter(
-          await buildLetterData(db, userId, claim, profile, letterDate),
+          await buildLetterData(db, userId, claim, profile, letterDate, debtor),
         );
         sent = await mailer.send({
           from: emailConfig.from,

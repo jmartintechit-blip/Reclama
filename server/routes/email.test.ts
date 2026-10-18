@@ -531,6 +531,19 @@ describe('POST /api/claims/:id/email with a fake mailer', () => {
       await expectRefused(user, claimId, 'invoice_paid');
     });
 
+    it('refuses with invoice_changed after a partial payment, and sends nothing', async () => {
+      const { user, claimId } = await setup(t);
+      const paid = await t.call(
+        user,
+        'POST',
+        `/api/invoices/${await invoiceIdOf(claimId)}/payments`,
+        { paid_on: '2026-10-30', amount_cents: 40_000 },
+      );
+      expect(paid.status, paid.text).toBe(201);
+
+      await expectRefused(user, claimId, 'invoice_changed');
+    });
+
     it('also refuses when only one invoice of several is paid', async () => {
       const { user, claimId } = await setup(t, { numbers: ['F-1', 'F-2'] });
       await t.db.query(
