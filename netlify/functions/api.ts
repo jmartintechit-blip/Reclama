@@ -1,10 +1,14 @@
 import { createApp } from '../../server/app.ts';
+import { createEmailFromEnv } from '../../server/config.ts';
 import { createDbFromEnv } from '../../server/db/client.ts';
 import { createNetlifyHandler } from '../../server/netlify-adapter.ts';
 
 // The only Netlify-specific file: the whole Express app runs inside this one Function.
 export default createNetlifyHandler(
-  createApp({ db: createDbFromEnv(process.env) }),
+  createApp({
+    db: createDbFromEnv(process.env),
+    ...createEmailFromEnv(process.env),
+  }),
 );
 
 export const config = {

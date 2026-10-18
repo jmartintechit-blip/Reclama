@@ -74,7 +74,7 @@ const REGULAR = 'Helvetica';
 const BOLD = 'Helvetica-Bold';
 const ITALIC = 'Helvetica-Oblique';
 
-const formatDate = (date: ISODate): string =>
+export const formatDate = (date: ISODate): string =>
   `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 
 // 1040 -> "10,40 %"

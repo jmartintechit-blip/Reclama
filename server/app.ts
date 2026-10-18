@@ -1,5 +1,6 @@
 import express from 'express';
 import { systemClock } from './clock.ts';
+import { DEFAULT_EMAIL_CONFIG, type EmailConfig } from './config.ts';
 import { errorHandler, notFoundHandler } from './middleware/errors.ts';
 import { originGuard } from './middleware/origin-guard.ts';
 import { requestId } from './middleware/request-id.ts';
@@ -12,6 +13,7 @@ import { createRouteRegistry } from './http/routes.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerClaimRoutes } from './routes/claims.ts';
 import { registerDebtorRoutes } from './routes/debtors.ts';
+import { registerEmailRoute } from './routes/email.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import {
   IMPORT_BODY_LIMIT_BYTES,
@@ -22,17 +24,26 @@ import { registerInvoiceRoutes } from './routes/invoices.ts';
 import { registerLetterRoute } from './routes/letter.ts';
 import { registerMeRoutes } from './routes/me.ts';
 import { registerRateRoutes } from './routes/rates.ts';
+import type { Mailer } from './services/mailer.ts';
 
 // Without a database the app still starts (liveness must work); every query then fails.
 const noDb: Db = {
   query: () => Promise.reject(new Error('No database configured')),
 };
 
-// `mailer` will join `db` and `clock` here later (plan section 2).
+// Without a `mailer` the app works and the email endpoint answers 503. The default config is the
+// safe one: sandbox mode.
 export function createApp({
   db,
   clock = systemClock,
-}: { db?: Db; clock?: Clock } = {}) {
+  mailer,
+  emailConfig = DEFAULT_EMAIL_CONFIG,
+}: {
+  db?: Db;
+  clock?: Clock;
+  mailer?: Mailer;
+  emailConfig?: EmailConfig;
+} = {}) {
   const app = express();
 
   app.disable('x-powered-by'); // do not advertise the framework and its version
@@ -70,6 +81,12 @@ export function createApp({
   registerInvoiceRoutes(defineRoute, { db: sessionDb, clock });
   registerClaimRoutes(defineRoute, { db: sessionDb, clock });
   registerLetterRoute(defineRoute, { db: sessionDb, clock });
+  registerEmailRoute(defineRoute, {
+    db: sessionDb,
+    clock,
+    mailer,
+    emailConfig,
+  });
 
   // After all the routes: the not-found handler catches what no route matched,
   // and the error handler must be the last middleware to receive every error.

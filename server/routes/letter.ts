@@ -24,7 +24,7 @@ const REQUIRED_PROFILE_FIELDS = ['business_name', 'tax_id', 'address'] as const;
 
 // A field counts as missing when nothing printable is left after the text is made safe for the
 // PDF (a name made only of zero-width characters would print as an empty line).
-function profileProblems(profile: Profile | null): ValidationDetail[] {
+export function profileProblems(profile: Profile | null): ValidationDetail[] {
   const problems: ValidationDetail[] = [];
   for (const field of REQUIRED_PROFILE_FIELDS) {
     const value = profile?.[field];
@@ -43,7 +43,7 @@ function profileProblems(profile: Profile | null): ValidationDetail[] {
 
 // ASCII only and made of the claim, never of raw user text: lower-case letters, digits and
 // hyphens from the first invoice number, or the start of the claim id when none is left.
-function letterFilename(claim: ClaimDetail): string {
+export function letterFilename(claim: ClaimDetail): string {
   const slug = (claim.lines[0]?.number ?? '')
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
@@ -56,7 +56,7 @@ function letterFilename(claim: ClaimDetail): string {
 }
 
 // The frozen numbers of the claim plus the few facts that only live in the invoice and the debtor.
-async function buildLetterData(
+export async function buildLetterData(
   db: Db,
   userId: string,
   claim: ClaimDetail,

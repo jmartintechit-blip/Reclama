@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import type { Express } from 'express';
 import { createApp } from '../app.ts';
+import type { EmailConfig } from '../config.ts';
 import { generateToken, hashToken, SESSION_COOKIE } from '../auth/session.ts';
 import type { Db } from '../db/client.ts';
 import { seedRates } from '../db/rates-seed.ts';
@@ -11,6 +12,7 @@ import { createTestDb, type TestDb } from '../db/test-db.ts';
 import { createUserWithProfile } from '../db/users.ts';
 import type { Clock } from '../domain/dates.ts';
 import { parseRates } from '../domain/rates.ts';
+import type { Mailer } from '../services/mailer.ts';
 import { close, listen } from '../test-utils.ts';
 
 const RATES_FILE = new URL(
@@ -100,6 +102,7 @@ export interface TestApp {
     method: string,
     path: string,
     body?: unknown,
+    headers?: Record<string, string>,
   ): Promise<Answer>;
   stop(): Promise<void>;
 }
@@ -108,10 +111,14 @@ export interface TestApp {
 export async function startTestApp({
   now = '2026-10-30T10:00:00Z',
   statements,
+  mailer,
+  emailConfig,
 }: {
   now?: string;
   // When given, every SQL text the app sends to the database is pushed here.
   statements?: string[];
+  mailer?: Mailer;
+  emailConfig?: EmailConfig;
 } = {}): Promise<TestApp> {
   let nowMs = Date.parse(now);
   const clock: Clock = { now: () => new Date(nowMs) };
@@ -125,7 +132,7 @@ export async function startTestApp({
         },
       }
     : db;
-  const app = createApp({ db: appDb, clock });
+  const app = createApp({ db: appDb, clock, mailer, emailConfig });
   const { server, baseUrl } = await listen(app);
   let counter = 0;
 
@@ -154,12 +161,13 @@ export async function startTestApp({
       );
       return { id: user.id, cookie: `${SESSION_COOKIE}=${token}` };
     },
-    async call(user, method, path, body) {
+    async call(user, method, path, body, headers) {
       const res = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           ...(user ? { Cookie: user.cookie } : {}),
+          ...headers,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       });

@@ -9,6 +9,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app.ts';
 import { getRegisteredRoutes, type RegisteredRoute } from '../http/routes.ts';
+import { createFakeMailer } from '../services/fake-mailer.ts';
 import {
   errorOf,
   invoiceOf,
@@ -27,6 +28,7 @@ interface Ids {
 interface Request {
   path: string;
   body?: unknown;
+  headers?: Record<string, string>;
 }
 
 // One well-formed request per route with a path parameter, built from the ids of A's data. The
@@ -62,6 +64,10 @@ const REQUESTS: Record<string, (ids: Ids) => Request> = {
   'GET /api/claims/:id/letter.pdf': ({ claimId }) => ({
     path: `/api/claims/${claimId}/letter.pdf`,
   }),
+  'POST /api/claims/:id/email': ({ claimId }) => ({
+    path: `/api/claims/${claimId}/email`,
+    headers: { 'Idempotency-Key': 'idor-matrix-key-1' },
+  }),
   'POST /api/claims/:id/events': ({ claimId }) => ({
     path: `/api/claims/${claimId}/events`,
     body: { kind: 'NOTE', occurred_on: '2026-10-30', note: 'attacker note' },
@@ -87,7 +93,8 @@ let t: TestApp;
 let a: TestUser;
 let b: TestUser;
 beforeAll(async () => {
-  t = await startTestApp();
+  // A fake mailer: the owner's own email must go through (the sandbox sends it to the test inbox).
+  t = await startTestApp({ mailer: createFakeMailer() });
   a = await t.makeUser();
   b = await t.makeUser();
   // The letter needs the business data of the sender: A, the owner, must be able to get her PDF.
@@ -202,9 +209,9 @@ describe('the IDOR matrix of the real app', () => {
       if (!build) throw new Error(`No IDOR request for ${key}`);
       const ids = await makeFixture();
       const before = await snapshotOfA();
-      const { path, body } = build(ids);
+      const { path, body, headers } = build(ids);
 
-      const attack = await t.call(b, route.method, path, body);
+      const attack = await t.call(b, route.method, path, body, headers);
 
       expect(attack.status, attack.text).toBe(404);
       expect(errorOf(attack)).toMatchObject({
@@ -223,7 +230,7 @@ describe('the IDOR matrix of the real app', () => {
       expect(await snapshotOfA()).toEqual(before);
 
       // The request itself is well formed: A, the owner, is served by the same route.
-      const own = await t.call(a, route.method, path, body);
+      const own = await t.call(a, route.method, path, body, headers);
       expect(own.status, own.text).toBeGreaterThanOrEqual(200);
       expect(own.status, own.text).toBeLessThan(300);
     },
@@ -237,7 +244,7 @@ describe('the IDOR matrix of the real app', () => {
       const build = REQUESTS[key];
       if (!build) throw new Error(`No IDOR request for ${key}`);
       const junk = 'not-a-uuid';
-      const { path, body } = build({
+      const { path, body, headers } = build({
         debtorId: junk,
         invoiceId: junk,
         paymentId: junk,
@@ -245,7 +252,7 @@ describe('the IDOR matrix of the real app', () => {
       });
 
       for (const user of [a, b]) {
-        const res = await t.call(user, route.method, path, body);
+        const res = await t.call(user, route.method, path, body, headers);
         expect(res.status, res.text).toBe(404);
         expect(errorOf(res).code).toBe('NOT_FOUND');
       }

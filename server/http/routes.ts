@@ -165,6 +165,15 @@ function check(schema: z.ZodType, input: unknown): Checked {
   };
 }
 
+// The one 429 answer of the API, also used by routes that check their own limits in the handler.
+export function sendRateLimited(
+  res: Response,
+  retryAfterSeconds: number,
+): void {
+  res.set('Retry-After', String(retryAfterSeconds));
+  sendError(res, 429, 'RATE_LIMITED', 'Too many requests, try again later');
+}
+
 function sendValidationError(res: Response, details: ValidationDetail[]): void {
   sendError(res, 400, 'VALIDATION_ERROR', 'Request validation failed', details);
 }
@@ -226,13 +235,7 @@ export function createRouteRegistry(
           windowSeconds,
         });
         if (!result.allowed) {
-          res.set('Retry-After', String(result.retryAfterSeconds));
-          sendError(
-            res,
-            429,
-            'RATE_LIMITED',
-            'Too many requests, try again later',
-          );
+          sendRateLimited(res, result.retryAfterSeconds);
           return;
         }
       }
