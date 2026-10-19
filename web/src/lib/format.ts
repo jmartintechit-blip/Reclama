@@ -41,3 +41,10 @@ export function formatRate(basisPoints: number): string {
 export function formatDays(days: number): string {
   return `${String(days)} ${days === 1 ? 'día' : 'días'}`;
 }
+
+// "2027-H1" -> "primer semestre de 2027" (the form the API names the semesters it lacks a rate for).
+export function formatSemester(code: string): string {
+  const match = /^(\d{4})-H([12])$/.exec(code);
+  if (!match) return code;
+  return `${match[2] === '1' ? 'primer' : 'segundo'} semestre de ${match[1] ?? ''}`;
+}

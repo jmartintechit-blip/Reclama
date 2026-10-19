@@ -77,7 +77,7 @@ describe('Login', () => {
       expect(form.router.state.location.pathname).toBe('/panel');
     });
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),
+      await screen.findByRole('heading', { level: 1, name: 'Facturas' }),
     ).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole('main'));
   });

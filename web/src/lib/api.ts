@@ -26,6 +26,8 @@ export interface Failure {
   // The server's error code (INVALID_CREDENTIALS...), when the body had one.
   code?: string;
   details?: ValidationDetail[];
+  // Business errors carry their figures here as an object (remaining_cents, missing_semesters).
+  extra?: Record<string, unknown>;
   // Seconds to wait, from the Retry-After header.
   retryAfter?: number;
 }
@@ -154,6 +156,7 @@ export async function api<T = void>(
   const failure = fail(kindOf(response.status), response.status, {
     code: typeof error.code === 'string' ? error.code : undefined,
     details: readDetails(error.details),
+    extra: isRecord(error.details) ? error.details : undefined,
     retryAfter: parseRetryAfter(response.headers.get('Retry-After')),
   });
   if (failure.code === SESSION_GONE_CODE) {

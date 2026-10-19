@@ -74,3 +74,13 @@ main:focus {
   margin-inline: auto;
   padding-inline: 20px;
 }
+
+/* Text for screen readers only (loading messages, labels of icon-only cells). */
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

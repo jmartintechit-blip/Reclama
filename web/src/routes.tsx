@@ -4,8 +4,10 @@ import { RedirectIfAuth, RequireAuth } from './components/Guards.tsx';
 import { SessionProvider } from './lib/session.tsx';
 import { Login, Register } from './pages/Auth.tsx';
 import { ComingSoon } from './pages/ComingSoon.tsx';
+import { Dashboard } from './pages/Dashboard.tsx';
 import { Demo } from './pages/Demo.tsx';
 import { Home } from './pages/Home.tsx';
+import { InvoiceDetail } from './pages/InvoiceDetail.tsx';
 import { Method } from './pages/Method.tsx';
 import { NotFound } from './pages/NotFound.tsx';
 import { Privacy } from './pages/Privacy.tsx';
@@ -36,11 +38,16 @@ export const routes: RouteObject[] = [
       {
         element: <RequireAuth />,
         children: [
-          { path: 'panel', element: <ComingSoon screen="Facturas" /> },
+          { path: 'panel', element: <Dashboard /> },
+          { path: 'facturas/:id', element: <InvoiceDetail /> },
           { path: 'importar', element: <ComingSoon screen="Importar" /> },
           {
             path: 'reclamaciones',
             element: <ComingSoon screen="Reclamaciones" />,
+          },
+          {
+            path: 'reclamaciones/nueva',
+            element: <ComingSoon screen="Nueva reclamación" />,
           },
           { path: 'perfil', element: <Profile /> },
         ],

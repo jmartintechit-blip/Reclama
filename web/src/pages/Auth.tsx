@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { ErrorSummary, TextField } from '../components/Field.tsx';
 import { api, type Failure } from '../lib/api.ts';
 import {
+  EMAIL_MAX_LENGTH,
+  EMAIL_PATTERN,
   errorsFromFailure,
   NO_ERRORS,
   rememberedPath,
@@ -21,12 +23,9 @@ import { useSession } from '../lib/session.tsx';
 
 type Mode = 'login' | 'register';
 
-// The server decides; these two rules are copied only to tell the person at once, without a
-// round trip, about the commonest mistakes. Same as the API: lower-case ASCII shape after
-// trimming, at most 254 characters, and 10 to 128 characters (code points) for a new password.
-const EMAIL_MAX_LENGTH = 254;
-const EMAIL_PATTERN =
-  /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+// The server decides; this rule (and the email one in lib/forms.ts) is copied only to tell the person
+// at once, without a round trip, about the commonest mistakes: 10 to 128 characters (code points)
+// for a new password.
 const PASSWORD_MIN_LENGTH = 10;
 const PASSWORD_MAX_LENGTH = 128;
 

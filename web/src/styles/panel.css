@@ -1,0 +1,508 @@
+/* The signed-in screens: invoice dashboard and invoice detail. Colours come from tokens.css. */
+
+.panel-page {
+  padding-block: clamp(24px, 4vw, 48px);
+  display: grid;
+  gap: 24px;
+  align-content: start;
+}
+
+.panel-page > * {
+  min-inline-size: 0;
+}
+
+.panel-page h1 {
+  font-size: var(--s-3);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.head p {
+  color: var(--muted);
+  margin-block-start: 4px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 44px;
+  justify-self: start;
+  color: var(--accent);
+  font-weight: 550;
+}
+
+.note {
+  color: var(--muted);
+  font-size: var(--s--1);
+  max-inline-size: 70ch;
+}
+
+/* ---------- Summary figures ---------- */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.kpis-note {
+  grid-column: 1 / -1;
+}
+
+.kpi {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.kpi h2 {
+  font-size: var(--s--1);
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.kpi .value {
+  font-size: var(--s-2);
+  font-weight: 500;
+  margin-block: 4px;
+}
+
+.kpi .note {
+  white-space: normal;
+}
+
+.kpi.alert .value {
+  color: var(--danger);
+}
+
+/* ---------- Filter chips ---------- */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  min-block-size: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--field-line);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ---------- Card, table and its stacked-card form ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.table-wrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  container: invoices / inline-size;
+  border-radius: 12px;
+}
+
+.panel table,
+.table-wrapper table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.table-wrapper caption {
+  text-align: start;
+  padding: 16px 20px;
+  font-weight: 600;
+  font-size: var(--s-1);
+}
+
+caption small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: var(--s--1);
+}
+
+.panel caption {
+  text-align: start;
+  color: var(--muted);
+  font-size: var(--s--1);
+  padding-block-end: 8px;
+}
+
+th,
+td {
+  padding: 10px 14px;
+  text-align: start;
+  border-block-end: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.table-wrapper td,
+.table-wrapper th {
+  padding: 12px 16px;
+}
+
+thead th {
+  font-size: var(--s--1);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.table-wrapper thead th {
+  background: color-mix(in oklab, var(--ink) 4%, var(--card));
+}
+
+td.r,
+th.r {
+  text-align: end;
+}
+
+tbody th {
+  font-weight: 600;
+}
+
+td small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--s--1);
+}
+
+tfoot th,
+tfoot td {
+  border-block-end: 0;
+  border-block-start: 2px solid var(--ink);
+  font-weight: 600;
+}
+
+.tablewrap {
+  overflow-x: auto;
+  max-inline-size: 100%;
+}
+
+.tablewrap table {
+  min-inline-size: 520px;
+}
+
+.table-wrapper tbody th,
+.table-wrapper .btn {
+  white-space: nowrap;
+}
+
+.table-wrapper tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
+@container invoices (width < 760px) {
+  table,
+  thead,
+  tbody,
+  tr,
+  th,
+  td {
+    display: block;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tbody tr {
+    display: grid;
+    gap: 6px;
+    padding: 14px 16px;
+    border-block-end: 1px solid var(--line);
+  }
+
+  tbody tr:last-child {
+    border-block-end: 0;
+  }
+
+  .table-wrapper th,
+  .table-wrapper td {
+    border: 0;
+    padding: 0;
+  }
+
+  .table-wrapper td.r {
+    text-align: start;
+  }
+
+  .table-wrapper caption {
+    display: block;
+    inline-size: 100%;
+  }
+
+  td[data-label]::before {
+    content: attr(data-label) ': ' / attr(data-label);
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  td[data-label] small {
+    display: inline;
+    margin-inline-start: 6px;
+  }
+
+  td[data-label] small::before {
+    content: '· ' / '';
+  }
+}
+
+/* ---------- Status badge: icon, text and colour together ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--s--1);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge svg {
+  inline-size: 14px;
+  block-size: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.badge.overdue {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.badge.soon {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.badge.paid {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.badge.dispute {
+  background: var(--neutral-bg);
+  color: var(--ink);
+}
+
+/* ---------- Loading, empty and error states ---------- */
+.state {
+  padding: 20px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.state h1,
+.state h2 {
+  font-size: var(--s-1);
+}
+
+.state p {
+  color: var(--muted);
+}
+
+.state.error {
+  border-color: var(--danger);
+}
+
+.state.empty {
+  justify-items: start;
+  padding: clamp(24px, 5vw, 48px);
+}
+
+.stair-mark {
+  inline-size: 96px;
+  block-size: 96px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.skeleton {
+  block-size: 14px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--line),
+    color-mix(in oklab, var(--line) 40%, var(--card)),
+    var(--line)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* A message inside a section: neutral, with a bar on the side, never only a colour. */
+.notice {
+  background: var(--warn-bg);
+  border-inline-start: 4px solid var(--warn);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.notice.calm {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* ---------- Invoice detail ---------- */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px 24px;
+}
+
+.facts > div {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+}
+
+.facts dt {
+  color: var(--muted);
+  font-size: var(--s--1);
+}
+
+.facts dd {
+  font-size: var(--s-2);
+  font-weight: 500;
+}
+
+.facts dd.accent {
+  color: var(--accent);
+}
+
+.facts small {
+  color: var(--muted);
+  font-size: var(--s--1);
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: clamp(16px, 3vw, 28px);
+  display: grid;
+  gap: 16px;
+}
+
+.panel > * {
+  min-inline-size: 0;
+}
+
+.panel h2 {
+  font-size: var(--s-1);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.panel h3 {
+  font-size: var(--s-0);
+  font-weight: 600;
+}
+
+.asof {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px 16px;
+}
+
+.asof .field {
+  min-inline-size: 14rem;
+}
+
+.pay-form {
+  max-inline-size: 36rem;
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--line);
+}
+
+.pay-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.debtor-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+}
+
+.debtor-facts dt {
+  color: var(--muted);
+  font-size: var(--s--1);
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 8px;
+}
+
+.choices .choice {
+  align-items: center;
+}
+
+.choices .choice input {
+  grid-row: auto;
+}
+
+.actions.claim {
+  align-items: center;
+}
+
+.actions.claim .note {
+  flex: 1 1 18rem;
+}

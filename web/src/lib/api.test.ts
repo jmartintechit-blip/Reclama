@@ -111,6 +111,24 @@ describe('api: every failure kind', () => {
     });
   });
 
+  it('keeps the figures of a business error (details sent as an object) in `extra`', async () => {
+    mockApi({
+      'POST /api/x': json(422, {
+        error: {
+          code: 'PAYMENT_EXCEEDS_BALANCE',
+          details: { remaining_cents: 134_250 },
+        },
+      }),
+    });
+    const result = await api('POST', '/api/x', {});
+    expect(result).toMatchObject({
+      kind: 'validation',
+      code: 'PAYMENT_EXCEEDS_BALANCE',
+      extra: { remaining_cents: 134_250 },
+    });
+    expect(result).not.toHaveProperty('details', expect.anything());
+  });
+
   it('reports a network failure as kind network with status 0', async () => {
     mockApi({ 'GET /api/x': networkError });
     expect(await api('GET', '/api/x')).toMatchObject({

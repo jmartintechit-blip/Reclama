@@ -33,19 +33,23 @@ describe('route guards', () => {
     expect(router.state.location.state).toEqual({ from: '/perfil?x=1' });
   });
 
-  it.each(['/panel', '/importar', '/reclamaciones', '/perfil'])(
-    'protects %s',
-    async (path) => {
-      const router = renderApp(path);
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe('/entrar');
-      });
-    },
-  );
+  it.each([
+    '/panel',
+    '/facturas/2b9df557-69f0-4aa3-a1d3-784ea6a42b1c',
+    '/importar',
+    '/reclamaciones',
+    '/reclamaciones/nueva?deudor=d1',
+    '/perfil',
+  ])('protects %s', async (path) => {
+    const router = renderApp(path);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/entrar');
+    });
+  });
 
   it('shows "Cargando…" while the session is unknown and then the page', async () => {
     mockApi({ 'GET /api/me': me() });
-    renderApp('/panel');
+    renderApp('/importar');
     expect(screen.getByRole('status').textContent).toBe('Cargando…');
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),
@@ -55,7 +59,7 @@ describe('route guards', () => {
   it('offers to retry when the session cannot be checked, and recovers', async () => {
     const user = userEvent.setup();
     mockApi({ 'GET /api/me': [networkError, me()] });
-    renderApp('/panel');
+    renderApp('/importar');
     await user.click(await screen.findByRole('button', { name: 'Reintentar' }));
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),

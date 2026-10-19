@@ -14,6 +14,12 @@ import {
   fieldMessage,
 } from './messages.ts';
 
+// The server's email rule, copied to tell the person at once: lower-case ASCII shape after
+// trimming, at most 254 characters.
+export const EMAIL_MAX_LENGTH = 254;
+export const EMAIL_PATTERN =
+  /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
 export interface FormErrors {
   // A message about the whole form (wrong credentials, no connection...).
   summary: string | null;

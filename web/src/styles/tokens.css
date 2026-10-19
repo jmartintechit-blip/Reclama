@@ -17,6 +17,10 @@
   --accent-mid: color-mix(in oklab, var(--accent) 34%, var(--card));
   --danger: light-dark(#b3261e, #ff9c93);
   --danger-bg: light-dark(#fdecea, #3a1b19);
+  /* Status colours for the invoice badges and notices; each pair is at least 5.7:1. */
+  --warn: light-dark(#7a4f00, #f0c36a);
+  --warn-bg: light-dark(#fff4d6, #36290d);
+  --neutral-bg: light-dark(#e6ebf0, #1f2d3f);
 
   --font:
     'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;

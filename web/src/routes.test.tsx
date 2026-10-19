@@ -2,7 +2,7 @@
 import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mockApi, UNAUTHENTICATED } from './test/mock-api.ts';
+import { me, mockApi, UNAUTHENTICATED } from './test/mock-api.ts';
 import { renderApp, sessionSettled } from './test/render.tsx';
 
 const NBSP = ' ';
@@ -203,5 +203,27 @@ describe('Privacy', () => {
     expect(text).toContain('una única cookie, la de sesión');
     expect(text).toContain('Estados Unidos');
     expect(text).toContain('24 horas');
+  });
+});
+
+describe('signed-in routes of the invoice screens', () => {
+  it('opens the claim screen placeholder under "Reclamaciones", behind the login', async () => {
+    mockApi({ 'GET /api/me': me() });
+    await renderAt('/reclamaciones/nueva?deudor=d1');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain('«Nueva reclamación»');
+    const nav = screen.getByRole('navigation', { name: 'Principal' });
+    expect(
+      within(nav)
+        .getByRole('link', { name: 'Reclamaciones' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+    expect(
+      within(nav)
+        .getByRole('link', { name: 'Facturas' })
+        .getAttribute('aria-current'),
+    ).toBeNull();
   });
 });

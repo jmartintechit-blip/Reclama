@@ -20,6 +20,8 @@ export function Layout() {
   const { status, user, signOut } = useSession();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutFailed, setSignOutFailed] = useState(false);
+  const inInvoices =
+    pathname.startsWith('/panel') || pathname.startsWith('/facturas');
   const main = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
 
@@ -54,7 +56,13 @@ export function Layout() {
           <nav aria-label="Principal" aria-busy={status === 'loading'}>
             {status === 'authenticated' ? (
               <>
-                <NavLink to="/panel">Facturas</NavLink>
+                {/* The invoice detail belongs to this section, which a plain NavLink would not highlight. */}
+                <Link
+                  to="/panel"
+                  aria-current={inInvoices ? 'page' : undefined}
+                >
+                  Facturas
+                </Link>
                 <NavLink to="/importar">Importar</NavLink>
                 <NavLink to="/reclamaciones">Reclamaciones</NavLink>
                 <NavLink to="/perfil">Perfil</NavLink>
