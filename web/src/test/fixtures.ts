@@ -1,13 +1,17 @@
 // Canned API answers for the invoice screens. Everything is fictitious. The shapes mirror what
 // the server sends (see lib/api-types.ts).
 import type {
+  ActionGuide,
+  ClaimBase,
   ClaimDetail,
+  ClaimEvent,
   ClaimLine,
   ClaimSummary,
   Debtor,
   Interest,
   InvoiceDetail,
   InvoiceView,
+  NextAction,
   Payment,
 } from '../lib/api-types.ts';
 import { todayMadrid } from '../lib/dates.ts';
@@ -180,20 +184,62 @@ const claimLine = (overrides: Partial<ClaimLine> = {}): ClaimLine => ({
   ...overrides,
 });
 
+const claimBase = (): ClaimBase => ({
+  id: CLAIM_ID,
+  debtor_id: DEBTOR_ID,
+  debtor_name: 'Talleres Ejemplo S.L.',
+  as_of: '2026-10-19',
+  compensation_mode: 'PER_CLAIM',
+  principal_cents: 234_250,
+  interest_cents: 25_000,
+  compensation_cents: 4000,
+  total_cents: 263_250,
+});
+
+// Short stand-ins for the server's guides (the real texts live in the server and are not copied).
+export const guide = (overrides: Partial<ActionGuide> = {}): ActionGuide => ({
+  title: 'Envía un recordatorio amable',
+  why: 'Un mensaje cordial suele bastar.',
+  steps: ['Comprueba las facturas.', 'Copia el texto y envíalo.'],
+  prepare: [],
+  outcomes: [],
+  notes: [],
+  template: {
+    text: 'Hola {{debtor_name}}: siguen pendientes las facturas {{invoice_numbers}}, por {{total}}.\n\n{{sender_name}}',
+    placeholders: ['debtor_name', 'invoice_numbers', 'total', 'sender_name'],
+  },
+  ...overrides,
+});
+
+export const nextAction = (
+  overrides: Partial<NextAction> = {},
+): NextAction => ({
+  action: 'SEND_REMINDER',
+  earliest_on: '2026-10-19',
+  reason:
+    'Todavía no has registrado ningún paso. Esa espera es una pauta orientativa de Reclama, no un plazo legal.',
+  wait_days: 0,
+  warnings: [],
+  guide: guide(),
+  ...overrides,
+});
+
+export const claimEvent = (
+  overrides: Partial<ClaimEvent> = {},
+): ClaimEvent => ({
+  id: 'e-1',
+  kind: 'REMINDER_SENT',
+  occurred_on: '2026-10-20',
+  note: null,
+  ...overrides,
+});
+
 // A frozen claim with two invoices: 2.342,50 + 250,00 of interest + 40,00 = 2.632,50.
 export const claimDetail = (
   overrides: Partial<ClaimDetail> = {},
 ): { claim: ClaimDetail } => ({
   claim: {
-    id: CLAIM_ID,
-    debtor_id: DEBTOR_ID,
-    debtor_name: 'Talleres Ejemplo S.L.',
-    as_of: '2026-10-19',
-    compensation_mode: 'PER_CLAIM',
-    principal_cents: 234_250,
-    interest_cents: 25_000,
-    compensation_cents: 4000,
-    total_cents: 263_250,
+    ...claimBase(),
     lines: [
       claimLine(),
       claimLine({
@@ -203,22 +249,21 @@ export const claimDetail = (
         interest_cents: 4468,
       }),
     ],
+    events: [],
+    next_action: nextAction(),
     ...overrides,
   },
 });
 
 export const claimSummary = (
   overrides: Partial<ClaimSummary> = {},
-): ClaimSummary => {
-  const { lines, ...base } = claimDetail().claim;
-  return {
-    ...base,
-    invoice_count: lines.length,
-    last_event: null,
-    next_action: { action: 'SEND_REMINDER', earliest_on: '2026-10-19' },
-    ...overrides,
-  };
-};
+): ClaimSummary => ({
+  ...claimBase(),
+  invoice_count: 2,
+  last_event: null,
+  next_action: { action: 'SEND_REMINDER', earliest_on: '2026-10-19' },
+  ...overrides,
+});
 
 export const claimsPage = (
   claims: ClaimSummary[],

@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { ClaimEmail } from '../components/ClaimEmail.tsx';
 import {
   ClaimFrame,
   ClaimLoadError,
   ClaimLoading,
 } from '../components/ClaimFrame.tsx';
+import { ClaimSteps } from '../components/ClaimSteps.tsx';
+import { EscalationGuide } from '../components/EscalationGuide.tsx';
 import { api, apiFile, type Failure } from '../lib/api.ts';
 import type { ClaimDetail } from '../lib/api-types.ts';
 import { COMPENSATION_LABELS, saveFile } from '../lib/claims.ts';
+import { todayMadrid } from '../lib/dates.ts';
 import { formatDate, formatEUR, formatRate } from '../lib/format.ts';
 import { useBusy } from '../lib/forms.ts';
 import { failureMessage, letterMessage } from '../lib/messages.ts';
@@ -345,6 +349,7 @@ export function ClaimDetailPage() {
     );
   }
   const { claim } = load.result.data;
+  const today = todayMadrid();
 
   return (
     <ClaimFrame
@@ -370,6 +375,10 @@ export function ClaimDetailPage() {
         </p>
         <LetterDownload claimId={claim.id} />
       </section>
+
+      <EscalationGuide claim={claim} today={today} />
+      <ClaimSteps claim={claim} today={today} onRecorded={load.reload} />
+      <ClaimEmail claim={claim} onRecorded={load.reload} />
 
       <section className="panel" aria-labelledby="cancelar-seccion">
         <h2 id="cancelar-seccion">Cancelar la reclamación</h2>

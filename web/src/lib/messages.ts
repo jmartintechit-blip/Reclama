@@ -66,6 +66,7 @@ const MAX_LENGTHS: Record<string, number> = {
   tax_id: 30,
   address: 500,
   iban: 64,
+  note: 1000,
 };
 
 // One validation detail -> Spanish text for its field. The match is on the rule the server
@@ -179,5 +180,48 @@ export function letterMessage(failure: Failure): string {
       return failure.kind === 'not_found'
         ? 'Esta reclamación ya no existe.'
         : failureMessage(failure);
+  }
+}
+
+// What POST /api/claims/:id/events can answer, in words; null for a validation error with field
+// details, which is left to the form.
+export function eventMessage(failure: Failure): string | null {
+  switch (failure.code) {
+    case 'EVENT_IN_FUTURE':
+      return 'La fecha del paso no puede ser futura.';
+    case 'EVENT_BEFORE_CLAIM':
+      return 'La fecha del paso no puede ser anterior a la fecha de cálculo de la reclamación.';
+    case 'EVENT_LIMIT_REACHED': {
+      const limit = failure.extra?.limit;
+      return `Esta reclamación ya tiene el máximo de pasos registrados${typeof limit === 'number' ? ` (${String(limit)})` : ''}.`;
+    }
+    default:
+      if (failure.kind === 'not_found') return 'Esta reclamación ya no existe.';
+      return failure.kind === 'validation' && failure.details?.length
+        ? null
+        : failureMessage(failure);
+  }
+}
+
+// What POST /api/claims/:id/email can answer, in words. The profile, letter and "claim can no
+// longer be demanded" errors read the same as for the PDF download.
+export function emailMessage(failure: Failure): string {
+  if (failure.kind === 'rate_limited') {
+    return `Has llegado al límite de envíos por email. ${rateLimitedMessage(failure.retryAfter)}`;
+  }
+  switch (failure.code) {
+    case 'EMAIL_ALREADY_SENT':
+      return 'Este envío ya se había hecho: el intento anterior sí llegó a salir. Si quieres mandar otro email, vuelve a pulsar el botón.';
+    case 'DEBTOR_EMAIL_MISSING':
+      return 'El deudor no tiene email. Guárdalo y vuelve a intentarlo.';
+    case 'EMAIL_NOT_CONFIGURED':
+      return 'El envío por email no está disponible en este servidor.';
+    case 'EMAIL_PROVIDER_ERROR':
+      return failure.extra?.reason === 'rejected' ||
+        failure.extra?.reason === 'invalid'
+        ? 'El servicio de correo ha rechazado el mensaje. Revisa el email del deudor e inténtalo de nuevo.'
+        : 'El servicio de correo no ha podido enviar el mensaje ahora mismo. Vuelve a pulsar el botón en unos minutos: se reutiliza el mismo intento, así que no se envía dos veces.';
+    default:
+      return letterMessage(failure);
   }
 }

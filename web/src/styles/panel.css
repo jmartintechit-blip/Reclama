@@ -512,6 +512,59 @@ tfoot td {
   flex: 1 1 18rem;
 }
 
+/* ---------- Escalation guide, steps and email ---------- */
+.panel h4 {
+  font-size: var(--s-0);
+  font-weight: 600;
+}
+
+.guide-list {
+  display: grid;
+  gap: 6px;
+  margin-block-start: 6px;
+  padding-inline-start: 1.5em;
+}
+
+.template {
+  display: grid;
+  gap: 8px;
+}
+
+.template textarea {
+  font-family: var(--mono);
+  font-size: var(--s--1);
+}
+
+.event-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+
+.event-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.event-list time {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.event-note {
+  flex-basis: 100%;
+}
+
+/* A live region that must exist before it has text, without taking a grid row while empty. */
+.live:empty {
+  position: absolute;
+}
+
 /* ---------- CSV import wizard ---------- */
 .import-page > * {
   max-inline-size: 60rem;

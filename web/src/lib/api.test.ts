@@ -42,6 +42,24 @@ describe('api: success', () => {
     });
   });
 
+  it('adds the extra headers it is given to the usual ones', async () => {
+    const { fetchMock } = mockApi({
+      'POST /api/claims/c1/email': json(200, { data: { sent: true } }),
+    });
+    await api('POST', '/api/claims/c1/email', undefined, {
+      'Idempotency-Key': 'key-12345678',
+    });
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({
+      Accept: 'application/json',
+      'Idempotency-Key': 'key-12345678',
+    });
+    await api('POST', '/api/claims/c1/email', { a: 1 }, { 'X-Test': '1' });
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'X-Test': '1',
+    });
+  });
+
   it('accepts a 204 with no body', async () => {
     mockApi({ 'POST /api/auth/logout': empty(204) });
     expect(await api('POST', '/api/auth/logout')).toEqual({

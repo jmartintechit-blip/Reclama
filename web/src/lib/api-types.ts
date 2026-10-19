@@ -169,8 +169,63 @@ export interface ClaimLine {
   segments: InterestSegmentData[];
 }
 
+export interface ClaimEvent {
+  id: string;
+  kind: ClaimEventKind;
+  occurred_on: string;
+  note: string | null;
+}
+
+// The guide the server writes for each next action: the app shows it as it comes (it holds the
+// legal statements and their sources), only the {{placeholders}} of the template are filled here.
+export interface GuideTemplate {
+  text: string;
+  placeholders: string[];
+}
+
+export interface ActionGuide {
+  title: string;
+  why: string;
+  steps: string[];
+  prepare: string[];
+  outcomes: string[];
+  notes: string[];
+  template: GuideTemplate | null;
+}
+
+export interface EscalationWarning {
+  code: string;
+  message: string;
+}
+
+// The engine's answer for a claim, computed on every read from its events.
+export interface NextAction {
+  action: string;
+  earliest_on: string | null;
+  reason: string;
+  wait_days: number;
+  warnings: EscalationWarning[];
+  guide: ActionGuide;
+}
+
+// GET /api/claims/:id. (POST /api/claims answers the same claim without `next_action`; the
+// builder only reads its id.)
 export interface ClaimDetail extends ClaimBase {
   lines: ClaimLine[];
+  // Oldest first.
+  events: ClaimEvent[];
+  next_action: NextAction;
+}
+
+// POST /api/claims/:id/email. In the sandbox (and always for a demo account) nothing reaches the
+// debtor and no event is recorded.
+export interface EmailSent {
+  sent: boolean;
+  mode: 'sandbox' | 'live';
+  delivered_to: string;
+  would_have_gone_to: string | null;
+  event_recorded: boolean;
+  provider_id: string;
 }
 
 export interface ClaimsPage {

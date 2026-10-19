@@ -27,3 +27,8 @@ function dayNumber(iso: string): number {
 export function daysBetween(from: string, to: string): number {
   return dayNumber(to) - dayNumber(from);
 }
+
+// `iso` moved by whole calendar days (negative: back).
+export function addDays(iso: string, days: number): string {
+  return new Date((dayNumber(iso) + days) * DAY_MS).toISOString().slice(0, 10);
+}

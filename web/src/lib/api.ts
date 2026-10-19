@@ -140,6 +140,8 @@ export async function api<T = void>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
+  // Extra request headers (the Idempotency-Key of a send), added to the usual ones.
+  headers: Record<string, string> = {},
 ): Promise<ApiResult<T>> {
   let response: Response;
   let text: string;
@@ -149,8 +151,12 @@ export async function api<T = void>(
       credentials: 'same-origin',
       headers:
         body === undefined
-          ? { Accept: 'application/json' }
-          : { Accept: 'application/json', 'Content-Type': 'application/json' },
+          ? { Accept: 'application/json', ...headers }
+          : {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+              ...headers,
+            },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     text = await response.text();
