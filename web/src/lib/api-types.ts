@@ -96,3 +96,37 @@ export interface Interest {
   warnings: string[];
   segments: InterestSegmentData[];
 }
+
+// POST /api/imports. The same shape comes back for a dry run (what WOULD happen) and for the
+// real import (what happened); only the dry run carries `preview`.
+export interface ImportRowIssue {
+  // The line in the file; the header is line 1.
+  row: number;
+  // The column's canonical name (number, debtorName, ...), or null when the whole row is at fault.
+  field: string | null;
+  code: string;
+  // English, written for developers: shown only when the app has no text for `code`.
+  message: string;
+}
+
+export interface ImportPreviewRow {
+  row: number;
+  number: string;
+  debtor_name: string;
+  issue_date: string;
+  due_date: string | null;
+  amount_cents: number;
+  already_imported: boolean;
+}
+
+export interface ImportOutcome {
+  dry_run: boolean;
+  rows_total: number;
+  rows_valid: number;
+  debtors_created: number;
+  invoices_created: number;
+  invoices_already_imported: number;
+  errors: ImportRowIssue[];
+  warnings: ImportRowIssue[];
+  preview?: ImportPreviewRow[];
+}

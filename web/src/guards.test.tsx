@@ -49,7 +49,7 @@ describe('route guards', () => {
 
   it('shows "Cargando…" while the session is unknown and then the page', async () => {
     mockApi({ 'GET /api/me': me() });
-    renderApp('/importar');
+    renderApp('/reclamaciones');
     expect(screen.getByRole('status').textContent).toBe('Cargando…');
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),
@@ -59,7 +59,7 @@ describe('route guards', () => {
   it('offers to retry when the session cannot be checked, and recovers', async () => {
     const user = userEvent.setup();
     mockApi({ 'GET /api/me': [networkError, me()] });
-    renderApp('/importar');
+    renderApp('/reclamaciones');
     await user.click(await screen.findByRole('button', { name: 'Reintentar' }));
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),

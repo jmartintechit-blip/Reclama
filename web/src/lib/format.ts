@@ -38,6 +38,12 @@ export function formatRate(basisPoints: number): string {
   return `${String(whole)},${fraction}${NBSP}%`;
 }
 
+// 2000 -> "2.000": a count of things, grouped like the amounts (es-ES skips the dot at 4 digits).
+const counter = new Intl.NumberFormat('es-ES', { useGrouping: 'always' });
+export function formatCount(value: number): string {
+  return counter.format(value);
+}
+
 export function formatDays(days: number): string {
   return `${String(days)} ${days === 1 ? 'día' : 'días'}`;
 }

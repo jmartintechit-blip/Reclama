@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDays, formatEUR, formatRate } from './format.ts';
+import {
+  formatCount,
+  formatDate,
+  formatDays,
+  formatEUR,
+  formatRate,
+} from './format.ts';
 
 const NBSP = ' ';
 
@@ -70,5 +76,14 @@ describe('formatDays', () => {
     expect(formatDays(1)).toBe('1 día');
     expect(formatDays(0)).toBe('0 días');
     expect(formatDays(402)).toBe('402 días');
+  });
+});
+
+describe('formatCount', () => {
+  it('keeps the thousands dot on four-digit counts', () => {
+    expect(formatCount(0)).toBe('0');
+    expect(formatCount(500)).toBe('500');
+    expect(formatCount(2000)).toBe('2.000');
+    expect(formatCount(1_234_567)).toBe('1.234.567');
   });
 });

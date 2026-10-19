@@ -266,6 +266,11 @@ tfoot td {
   td[data-label] small::before {
     content: '· ' / '';
   }
+
+  /* A bare row number would mean nothing once the header row is hidden. */
+  tbody th[data-label]::before {
+    content: attr(data-label) ' ' / attr(data-label) ' ';
+  }
 }
 
 /* ---------- Status badge: icon, text and colour together ---------- */
@@ -505,4 +510,122 @@ tfoot td {
 
 .actions.claim .note {
   flex: 1 1 18rem;
+}
+
+/* ---------- CSV import wizard ---------- */
+.import-page > * {
+  max-inline-size: 60rem;
+}
+
+.wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wizard-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.wizard-steps .num {
+  display: grid;
+  place-items: center;
+  inline-size: 30px;
+  block-size: 30px;
+  border-radius: 50%;
+  border: 1.5px solid var(--field-line);
+  font-family: var(--mono);
+  font-size: var(--s--1);
+}
+
+.wizard-steps li.done .num {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard-steps li[aria-current='step'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.wizard-steps li[aria-current='step'] .num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* The heading receives focus from the code at each step; it is not a control. */
+.import-page .panel h2:focus {
+  outline: none;
+}
+
+.dropzone {
+  padding: 16px;
+  border: 2px dashed var(--field-line);
+  border-radius: 12px;
+}
+
+.dropzone.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+input[type='file'].input {
+  padding: 8px;
+}
+
+input[type='file']::file-selector-button {
+  min-block-size: 36px;
+  margin-inline-end: 12px;
+  padding: 0 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.file-chosen,
+.file-line {
+  overflow-wrap: anywhere;
+}
+
+.file-chosen:empty {
+  position: absolute;
+}
+
+.import-summary {
+  font-size: var(--s-1);
+  font-weight: 500;
+}
+
+.format-help {
+  display: grid;
+  gap: 12px;
+  padding-block-start: 16px;
+  border-block-start: 1px solid var(--line);
+}
+
+.format-help ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-inline-start: 1.25em;
+}
+
+.format-help a {
+  color: var(--accent);
+}
+
+.table-more {
+  padding: 12px 16px;
+  border-block-start: 1px solid var(--line);
 }

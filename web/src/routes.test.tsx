@@ -227,3 +227,32 @@ describe('signed-in routes of the invoice screens', () => {
     ).toBeNull();
   });
 });
+
+describe('signed-in route of the CSV import', () => {
+  it('opens the import wizard under "Importar", behind the login', async () => {
+    mockApi({ 'GET /api/me': me() });
+    await renderAt('/importar');
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Importar facturas',
+      }),
+    ).toBeTruthy();
+    expect(document.title).toBe('Importar facturas · Reclama');
+    const nav = screen.getByRole('navigation', { name: 'Principal' });
+    expect(
+      within(nav)
+        .getByRole('link', { name: 'Importar' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+    expect(
+      within(nav).getByRole('link', { name: 'Importar' }).getAttribute('href'),
+    ).toBe('/importar');
+  });
+
+  it('is reached from the empty dashboard and the header, not from a placeholder', async () => {
+    mockApi({ 'GET /api/me': me() });
+    await renderAt('/importar');
+    expect(screen.queryByRole('heading', { name: 'Próximamente' })).toBeNull();
+  });
+});

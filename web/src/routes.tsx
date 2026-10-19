@@ -7,6 +7,7 @@ import { ComingSoon } from './pages/ComingSoon.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { Demo } from './pages/Demo.tsx';
 import { Home } from './pages/Home.tsx';
+import { ImportCsv } from './pages/ImportCsv.tsx';
 import { InvoiceDetail } from './pages/InvoiceDetail.tsx';
 import { Method } from './pages/Method.tsx';
 import { NotFound } from './pages/NotFound.tsx';
@@ -40,7 +41,7 @@ export const routes: RouteObject[] = [
         children: [
           { path: 'panel', element: <Dashboard /> },
           { path: 'facturas/:id', element: <InvoiceDetail /> },
-          { path: 'importar', element: <ComingSoon screen="Importar" /> },
+          { path: 'importar', element: <ImportCsv /> },
           {
             path: 'reclamaciones',
             element: <ComingSoon screen="Reclamaciones" />,
