@@ -110,6 +110,32 @@ function fail(
   return { ok: false, kind, status, ...extra };
 }
 
+// The failure for a non-2xx answer whose body has already been read. A 401 that says the session
+// is gone is announced here, so every call (JSON or file) flips the app to anonymous.
+function failureOf(response: Response, json: unknown): Failure {
+  const error = isRecord(json) && isRecord(json.error) ? json.error : {};
+  const failure = fail(kindOf(response.status), response.status, {
+    code: typeof error.code === 'string' ? error.code : undefined,
+    details: readDetails(error.details),
+    extra: isRecord(error.details) ? error.details : undefined,
+    retryAfter: parseRetryAfter(response.headers.get('Retry-After')),
+  });
+  if (failure.code === SESSION_GONE_CODE) {
+    for (const listener of expiredListeners) listener();
+  }
+  return failure;
+}
+
+// Not JSON (an empty 429 from the edge, an HTML 502): `parsed` is false and `json` undefined.
+function parseJson(text: string): { json: unknown; parsed: boolean } {
+  if (text === '') return { json: undefined, parsed: true };
+  try {
+    return { json: JSON.parse(text) as unknown, parsed: true };
+  } catch {
+    return { json: undefined, parsed: false };
+  }
+}
+
 export async function api<T = void>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
@@ -132,15 +158,7 @@ export async function api<T = void>(
     return fail('network', 0);
   }
 
-  let json: unknown;
-  let parsed = true;
-  if (text !== '') {
-    try {
-      json = JSON.parse(text);
-    } catch {
-      parsed = false;
-    }
-  }
+  const { json, parsed } = parseJson(text);
 
   if (response.ok) {
     if (text === '') return { ok: true, data: undefined as T };
@@ -152,15 +170,47 @@ export async function api<T = void>(
     return { ok: true, data: json.data as T };
   }
 
-  const error = isRecord(json) && isRecord(json.error) ? json.error : {};
-  const failure = fail(kindOf(response.status), response.status, {
-    code: typeof error.code === 'string' ? error.code : undefined,
-    details: readDetails(error.details),
-    extra: isRecord(error.details) ? error.details : undefined,
-    retryAfter: parseRetryAfter(response.headers.get('Retry-After')),
-  });
-  if (failure.code === SESSION_GONE_CODE) {
-    for (const listener of expiredListeners) listener();
+  return failureOf(response, json);
+}
+
+// A GET that answers a file (the letter PDF) instead of JSON. The content type is checked before
+// the body is taken for the file: a 200 with the app's HTML page must not be saved as a PDF.
+// Errors are the API's usual JSON, so the screen reads them like any other failure.
+export async function apiFile(
+  path: string,
+  contentType: string,
+): Promise<ApiResult<{ blob: Blob; filename: string | null }>> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: `${contentType}, application/json` },
+    });
+    if (response.ok) {
+      const type = response.headers.get('Content-Type') ?? '';
+      if (!type.toLowerCase().startsWith(contentType)) {
+        return fail('server', response.status);
+      }
+      return {
+        ok: true,
+        data: {
+          blob: await response.blob(),
+          filename: filenameOf(response.headers.get('Content-Disposition')),
+        },
+      };
+    }
+    return failureOf(response, parseJson(await response.text()).json);
+  } catch {
+    return fail('network', 0);
   }
-  return failure;
+}
+
+// Only a plain name is trusted (letters, digits, dots, hyphens): whatever else the header says,
+// the caller falls back to its own name.
+function filenameOf(disposition: string | null): string | null {
+  const match = /filename="([A-Za-z0-9][A-Za-z0-9._-]{0,100})"/.exec(
+    disposition ?? '',
+  );
+  return match?.[1] ?? null;
 }

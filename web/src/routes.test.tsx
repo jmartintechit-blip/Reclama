@@ -2,7 +2,7 @@
 import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { me, mockApi, UNAUTHENTICATED } from './test/mock-api.ts';
+import { json, me, mockApi, UNAUTHENTICATED } from './test/mock-api.ts';
 import { renderApp, sessionSettled } from './test/render.tsx';
 
 const NBSP = ' ';
@@ -207,13 +207,20 @@ describe('Privacy', () => {
 });
 
 describe('signed-in routes of the invoice screens', () => {
-  it('opens the claim screen placeholder under "Reclamaciones", behind the login', async () => {
-    mockApi({ 'GET /api/me': me() });
-    await renderAt('/reclamaciones/nueva?deudor=d1');
+  it('opens the claim list under "Reclamaciones", behind the login', async () => {
+    mockApi({
+      'GET /api/me': me(),
+      'GET /api/claims': json(200, {
+        data: { claims: [], page: { limit: 50, offset: 0, total: 0 } },
+      }),
+    });
+    await renderAt('/reclamaciones');
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Reclamaciones',
+      }),
     ).toBeTruthy();
-    expect(document.body.textContent).toContain('«Nueva reclamación»');
     const nav = screen.getByRole('navigation', { name: 'Principal' });
     expect(
       within(nav)
@@ -225,6 +232,23 @@ describe('signed-in routes of the invoice screens', () => {
         .getByRole('link', { name: 'Facturas' })
         .getAttribute('aria-current'),
     ).toBeNull();
+  });
+
+  it('keeps "Reclamaciones" current on a claim, and says what is missing without a debtor', async () => {
+    mockApi({ 'GET /api/me': me() });
+    await renderAt('/reclamaciones/nueva');
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Falta elegir el deudor',
+      }),
+    ).toBeTruthy();
+    const nav = screen.getByRole('navigation', { name: 'Principal' });
+    expect(
+      within(nav)
+        .getByRole('link', { name: 'Reclamaciones' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
   });
 });
 
@@ -248,11 +272,5 @@ describe('signed-in route of the CSV import', () => {
     expect(
       within(nav).getByRole('link', { name: 'Importar' }).getAttribute('href'),
     ).toBe('/importar');
-  });
-
-  it('is reached from the empty dashboard and the header, not from a placeholder', async () => {
-    mockApi({ 'GET /api/me': me() });
-    await renderAt('/importar');
-    expect(screen.queryByRole('heading', { name: 'Próximamente' })).toBeNull();
   });
 });

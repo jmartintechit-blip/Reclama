@@ -1,6 +1,9 @@
 // Canned API answers for the invoice screens. Everything is fictitious. The shapes mirror what
 // the server sends (see lib/api-types.ts).
 import type {
+  ClaimDetail,
+  ClaimLine,
+  ClaimSummary,
   Debtor,
   Interest,
   InvoiceDetail,
@@ -11,6 +14,7 @@ import { todayMadrid } from '../lib/dates.ts';
 
 export const DEBTOR_ID = '5a1f2c3e-0000-4000-8000-0000000000d1';
 export const INVOICE_ID = '2b9df557-69f0-4aa3-a1d3-784ea6a42b1c';
+export const CLAIM_ID = '7c0e1a22-0000-4000-8000-0000000000c1';
 
 export const TODAY = todayMadrid();
 
@@ -145,5 +149,87 @@ export const interest = (
       seg('2026-07-01', '2026-10-19', 111, 1040, 134_250, 4246),
     ],
     ...overrides,
+  },
+});
+
+const claimLine = (overrides: Partial<ClaimLine> = {}): ClaimLine => ({
+  invoice_id: INVOICE_ID,
+  number: 'FA-2025-001',
+  principal_cents: 184_250,
+  interest_cents: 20_532,
+  segments: [
+    {
+      start: '2025-09-17',
+      end: '2025-12-31',
+      days: 106,
+      year_days: 365,
+      rate_bp: 1015,
+      balance_cents: 184_250,
+      interest_cents: 5431,
+    },
+    {
+      start: '2026-01-01',
+      end: '2026-10-19',
+      days: 292,
+      year_days: 365,
+      rate_bp: 1040,
+      balance_cents: 184_250,
+      interest_cents: 15_101,
+    },
+  ],
+  ...overrides,
+});
+
+// A frozen claim with two invoices: 2.342,50 + 250,00 of interest + 40,00 = 2.632,50.
+export const claimDetail = (
+  overrides: Partial<ClaimDetail> = {},
+): { claim: ClaimDetail } => ({
+  claim: {
+    id: CLAIM_ID,
+    debtor_id: DEBTOR_ID,
+    debtor_name: 'Talleres Ejemplo S.L.',
+    as_of: '2026-10-19',
+    compensation_mode: 'PER_CLAIM',
+    principal_cents: 234_250,
+    interest_cents: 25_000,
+    compensation_cents: 4000,
+    total_cents: 263_250,
+    lines: [
+      claimLine(),
+      claimLine({
+        invoice_id: '9d3a0b11-0000-4000-8000-0000000000a2',
+        number: 'FA-2025-002',
+        principal_cents: 50_000,
+        interest_cents: 4468,
+      }),
+    ],
+    ...overrides,
+  },
+});
+
+export const claimSummary = (
+  overrides: Partial<ClaimSummary> = {},
+): ClaimSummary => {
+  const { lines, ...base } = claimDetail().claim;
+  return {
+    ...base,
+    invoice_count: lines.length,
+    last_event: null,
+    next_action: { action: 'SEND_REMINDER', earliest_on: '2026-10-19' },
+    ...overrides,
+  };
+};
+
+export const claimsPage = (
+  claims: ClaimSummary[],
+  options: { total?: number; limit?: number; offset?: number } = {},
+) => ({
+  data: {
+    claims,
+    page: {
+      limit: options.limit ?? 50,
+      offset: options.offset ?? 0,
+      total: options.total ?? claims.length,
+    },
   },
 });

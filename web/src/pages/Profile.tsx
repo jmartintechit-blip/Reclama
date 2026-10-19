@@ -1,5 +1,9 @@
 import { useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
 import {
+  COMPENSATION_OPTIONS,
+  CompensationOption,
+} from '../components/CompensationChoices.tsx';
+import {
   ErrorSummary,
   TextAreaField,
   TextField,
@@ -27,28 +31,6 @@ const LABELS = {
   password: 'Contraseña',
 };
 const PROFILE_FIELDS = ['business_name', 'tax_id', 'address', 'iban'] as const;
-
-const COMPENSATION_OPTIONS: {
-  value: Compensation;
-  title: string;
-  text: string;
-}[] = [
-  {
-    value: 'NONE',
-    title: 'Sin compensación',
-    text: 'No sumas nada por los costes de cobro: solo el principal y los intereses.',
-  },
-  {
-    value: 'PER_INVOICE',
-    title: '40 € por factura vencida',
-    text: 'Se suman 40 € por cada factura vencida de la reclamación. Es la lectura más favorable para ti.',
-  },
-  {
-    value: 'PER_CLAIM',
-    title: '40 € por reclamación (la lectura más prudente)',
-    text: 'Se suman 40 € una sola vez por reclamación, tenga una factura o varias.',
-  },
-];
 
 interface FormState {
   business_name: string;
@@ -173,6 +155,7 @@ function ProfileForm() {
         {COMPENSATION_OPTIONS.map((option) => (
           <CompensationOption
             key={option.value}
+            name="default_compensation"
             option={option}
             checked={values.default_compensation === option.value}
             onSelect={() => {
@@ -192,32 +175,6 @@ function ProfileForm() {
         {busy ? 'Guardando…' : 'Guardar perfil'}
       </button>
     </form>
-  );
-}
-
-function CompensationOption({
-  option,
-  checked,
-  onSelect,
-}: {
-  option: (typeof COMPENSATION_OPTIONS)[number];
-  checked: boolean;
-  onSelect: () => void;
-}) {
-  const id = useId();
-  return (
-    <label className="choice">
-      <input
-        type="radio"
-        name="default_compensation"
-        value={option.value}
-        checked={checked}
-        aria-describedby={id}
-        onChange={onSelect}
-      />
-      <b>{option.title}</b>
-      <small id={id}>{option.text}</small>
-    </label>
   );
 }
 

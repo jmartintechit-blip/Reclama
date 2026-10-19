@@ -1,6 +1,7 @@
-// The shapes of what the API answers for invoices, payments, debtors and interest. They mirror
-// the server by hand (the web never imports server code); the server is the authority, and a
-// test with a real-looking payload keeps the two honest. Amounts are integer cents everywhere.
+// The shapes of what the API answers for invoices, payments, debtors, interest and claims. They
+// mirror the server by hand (the web never imports server code); the server is the authority, and
+// a test with a real-looking payload keeps the two honest. Amounts are integer cents everywhere.
+import type { Compensation } from './session.tsx';
 
 export type InvoiceStatus = 'OPEN' | 'PAID' | 'DISPUTED';
 export type DebtorKind = 'BUSINESS' | 'PUBLIC_ADMIN' | 'CONSUMER' | 'UNKNOWN';
@@ -129,4 +130,50 @@ export interface ImportOutcome {
   errors: ImportRowIssue[];
   warnings: ImportRowIssue[];
   preview?: ImportPreviewRow[];
+}
+
+// GET/POST /api/claims. A claim is frozen when it is created: these are the numbers the server
+// calculated then, not what the invoices say today.
+export type ClaimEventKind =
+  | 'REMINDER_SENT'
+  | 'DEMAND_SENT'
+  | 'BUROFAX_SENT'
+  | 'MONITORIO_FILED'
+  | 'PAID'
+  | 'NOTE';
+
+export interface ClaimBase {
+  id: string;
+  debtor_id: string;
+  debtor_name: string;
+  as_of: string;
+  compensation_mode: Compensation;
+  principal_cents: number;
+  interest_cents: number;
+  compensation_cents: number;
+  total_cents: number;
+}
+
+export interface ClaimSummary extends ClaimBase {
+  invoice_count: number;
+  last_event: { kind: ClaimEventKind; occurred_on: string } | null;
+  // Only the kind of step that is pending, or DONE (paid) / BLOCKED (the debtor is not a business).
+  next_action: { action: string; earliest_on: string | null };
+}
+
+export interface ClaimLine {
+  invoice_id: string;
+  number: string;
+  principal_cents: number;
+  interest_cents: number;
+  segments: InterestSegmentData[];
+}
+
+export interface ClaimDetail extends ClaimBase {
+  lines: ClaimLine[];
+}
+
+export interface ClaimsPage {
+  claims: ClaimSummary[];
+  page: PageInfo;
 }

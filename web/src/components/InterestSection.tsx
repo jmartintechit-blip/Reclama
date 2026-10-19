@@ -4,7 +4,7 @@ import {
   formatDate,
   formatEUR,
   formatRate,
-  formatSemester,
+  formatSemesterList,
 } from '../lib/format.ts';
 import { failureMessage } from '../lib/messages.ts';
 import { interestToTimeline } from '../lib/invoice-timeline.ts';
@@ -12,7 +12,6 @@ import { TextField } from './Field.tsx';
 import { Timeline } from './Timeline.tsx';
 
 export const MIN_AS_OF = '1990-01-01';
-const MAX_NAMED_SEMESTERS = 4;
 
 // Why a calculation date cannot be used, or null when it can. An empty field means "today".
 export function asOfProblem(asOf: string, today: string): string | null {
@@ -20,20 +19,6 @@ export function asOfProblem(asOf: string, today: string): string | null {
   if (asOf > today) return 'La fecha de cálculo no puede ser futura.';
   if (asOf < MIN_AS_OF) return 'Elige una fecha a partir de 1990.';
   return null;
-}
-
-function semesterList(codes: unknown): string {
-  const names = (Array.isArray(codes) ? codes : [])
-    .filter((code): code is string => typeof code === 'string')
-    .map(formatSemester);
-  if (names.length === 0) return 'algunos semestres';
-  if (names.length > MAX_NAMED_SEMESTERS) {
-    const rest = names.length - MAX_NAMED_SEMESTERS;
-    return `${names.slice(0, MAX_NAMED_SEMESTERS).join(', ')} y ${String(rest)} más`;
-  }
-  return names.length === 1
-    ? (names[0] ?? '')
-    : `${names.slice(0, -1).join(', ')} y ${names.at(-1) ?? ''}`;
 }
 
 function InterestError({
@@ -51,9 +36,9 @@ function InterestError({
         <p>
           <b>No podemos calcular estos intereses.</b> Faltan los tipos de demora
           del BOE de estos semestres:{' '}
-          {semesterList(failure.extra?.missing_semesters)}. Reclama no extrapola
-          ni estima tipos: solo calcula con los que ya son oficiales y tiene
-          cargados.
+          {formatSemesterList(failure.extra?.missing_semesters)}. Reclama no
+          extrapola ni estima tipos: solo calcula con los que ya son oficiales y
+          tiene cargados.
         </p>
       </div>
     );

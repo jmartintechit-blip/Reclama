@@ -2,6 +2,8 @@
 // field paths (and English rule descriptions meant for developers); this file turns them into
 // text for people.
 import type { Failure, ValidationDetail } from './api.ts';
+import { MAX_INVOICES_PER_CLAIM } from './claims.ts';
+import { formatSemesterList } from './format.ts';
 
 export const NETWORK_MESSAGE =
   'No hemos podido conectar. Revisa tu conexión y vuelve a intentarlo.';
@@ -97,4 +99,85 @@ export function fieldMessage({ path, message }: ValidationDetail): string {
     return `Este campo admite como máximo ${String(max)} caracteres.`;
   }
   return 'Revisa este campo.';
+}
+
+// What POST /api/claims can answer, in words. Anything without its own text falls back to the
+// generic failure text; a validation error with field details is left to the form.
+export function createClaimMessage(failure: Failure): string | null {
+  switch (failure.code) {
+    case 'DEBTOR_NOT_B2B':
+      return 'Reclama solo reclama a empresas y autónomos: la ley de morosidad no cubre a los consumidores y las administraciones públicas siguen otras reglas.';
+    case 'DEBTOR_KIND_UNKNOWN':
+    case 'DEBTOR_KIND_UNCONFIRMED':
+      return 'Marca primero al deudor como empresa o autónomo. Se hace desde la pantalla de una de sus facturas.';
+    case 'NOT_OVERDUE':
+      return 'Ninguna de las facturas elegidas estaba vencida en la fecha de cálculo. Elige otra fecha u otras facturas.';
+    case 'RATE_WINDOW':
+      return `No podemos calcular los intereses de estas facturas: faltan los tipos de demora del BOE de ${formatSemesterList(failure.extra?.missing_semesters)}. Reclama no extrapola ni estima tipos.`;
+    case 'AS_OF_IN_FUTURE':
+      return 'La fecha de cálculo no puede ser futura.';
+    case 'CLAIM_TOO_LARGE': {
+      const limit =
+        typeof failure.extra?.limit === 'number'
+          ? failure.extra.limit
+          : MAX_INVOICES_PER_CLAIM;
+      return `Una reclamación admite como máximo ${String(limit)} facturas. Elige algunas y reclama el resto en una segunda reclamación.`;
+    }
+    case 'INVOICE_IN_CLAIM':
+      return 'Alguna de las facturas elegidas ya está en otra reclamación. Cancela esa reclamación o quita la factura de la selección.';
+    case 'INVOICE_NOT_OPEN':
+      return 'Alguna de las facturas elegidas ya está cobrada o no está abierta. Recarga la página para ver cómo están ahora.';
+    case 'CLAIM_LIMIT_REACHED':
+      return 'Has llegado al máximo de reclamaciones de la cuenta. Cancela alguna que ya no necesites.';
+    case 'CALCULATION_FAILED':
+      return 'No hemos podido calcular los intereses de estas facturas. Revisa sus fechas y sus cobros.';
+    default:
+      break;
+  }
+  if (failure.kind === 'not_found') {
+    return 'No encontramos el deudor o alguna de las facturas. Puede que se hayan borrado: recarga la página.';
+  }
+  return failure.kind === 'validation' && failure.details?.length
+    ? null
+    : failureMessage(failure);
+}
+
+const PROFILE_FIELD_NAMES: Record<string, string> = {
+  business_name: 'nombre o razón social',
+  tax_id: 'NIF/CIF',
+  address: 'dirección',
+  iban: 'IBAN válido',
+};
+
+// What GET /api/claims/:id/letter.pdf can answer, in words.
+export function letterMessage(failure: Failure): string {
+  switch (failure.code) {
+    case 'PROFILE_INCOMPLETE': {
+      const missing = (failure.details ?? [])
+        .map((detail) => PROFILE_FIELD_NAMES[detail.path])
+        .filter((name): name is string => name !== undefined);
+      return missing.length > 0
+        ? `Para generar la carta faltan datos en tu perfil: ${missing.join(', ')}.`
+        : 'Para generar la carta completa los datos de tu negocio en el perfil.';
+    }
+    case 'CLAIM_NOT_ACTIONABLE':
+      switch (failure.extra?.reason) {
+        case 'invoice_changed':
+          return 'Una de las facturas ha cambiado desde que creaste esta reclamación (por ejemplo, has registrado un cobro), así que las cifras de la carta ya no son correctas. Cancela esta reclamación y crea otra con las cifras actualizadas.';
+        case 'invoice_paid':
+          return 'Una de las facturas se ha cobrado por completo desde que creaste la reclamación, así que ya no hay nada que reclamar. Puedes cancelarla.';
+        case 'marked_paid':
+          return 'La reclamación está marcada como cobrada, así que no se puede generar la carta.';
+        case 'debtor_not_business':
+          return 'El deudor ya no está marcado como empresa o autónomo, así que no se puede generar la carta. Revisa su tipo en la pantalla de una de sus facturas.';
+        default:
+          return 'Ya no se puede generar la carta de esta reclamación porque sus datos han cambiado. Cancélala y crea otra.';
+      }
+    case 'LETTER_NOT_AVAILABLE':
+      return 'No hemos podido generar la carta de esta reclamación.';
+    default:
+      return failure.kind === 'not_found'
+        ? 'Esta reclamación ya no existe.'
+        : failureMessage(failure);
+  }
 }

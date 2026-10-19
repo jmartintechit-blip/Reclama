@@ -39,6 +39,7 @@ describe('route guards', () => {
     '/importar',
     '/reclamaciones',
     '/reclamaciones/nueva?deudor=d1',
+    '/reclamaciones/2b9df557-69f0-4aa3-a1d3-784ea6a42b1c',
     '/perfil',
   ])('protects %s', async (path) => {
     const router = renderApp(path);
@@ -49,20 +50,20 @@ describe('route guards', () => {
 
   it('shows "Cargando…" while the session is unknown and then the page', async () => {
     mockApi({ 'GET /api/me': me() });
-    renderApp('/reclamaciones');
+    renderApp('/perfil');
     expect(screen.getByRole('status').textContent).toBe('Cargando…');
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),
+      await screen.findByRole('heading', { level: 1, name: 'Perfil' }),
     ).toBeTruthy();
   });
 
   it('offers to retry when the session cannot be checked, and recovers', async () => {
     const user = userEvent.setup();
     mockApi({ 'GET /api/me': [networkError, me()] });
-    renderApp('/reclamaciones');
+    renderApp('/perfil');
     await user.click(await screen.findByRole('button', { name: 'Reintentar' }));
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),
+      await screen.findByRole('heading', { level: 1, name: 'Perfil' }),
     ).toBeTruthy();
   });
 

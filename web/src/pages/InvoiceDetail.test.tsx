@@ -23,6 +23,8 @@ import {
   detail,
   INVOICE_ID,
   interest,
+  invoice,
+  invoicesPage,
   payment,
   TODAY,
 } from '../test/fixtures.ts';
@@ -808,13 +810,21 @@ describe('InvoiceDetail: "Crear reclamación"', () => {
   });
 
   it('opens the claim screen (not built yet, but behind the same login)', async () => {
-    script();
+    script({
+      extra: {
+        [`GET /api/invoices?debtor_id=${DEBTOR_ID}&status=OPEN&limit=100&offset=0`]:
+          json(200, invoicesPage([invoice()])),
+      },
+    });
     const { router, user } = await openInvoice();
     await user.click(screen.getByRole('link', { name: 'Crear reclamación' }));
     expect(router.state.location.pathname).toBe('/reclamaciones/nueva');
     expect(router.state.location.search).toBe(`?deudor=${DEBTOR_ID}`);
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Próximamente' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Nueva reclamación',
+      }),
     ).toBeTruthy();
   });
 

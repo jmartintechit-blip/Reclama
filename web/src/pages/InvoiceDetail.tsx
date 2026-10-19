@@ -13,6 +13,7 @@ import type {
   InvoiceDetail as InvoiceDetailData,
 } from '../lib/api-types.ts';
 import { api, type Failure } from '../lib/api.ts';
+import { debtorBlocker } from '../lib/claims.ts';
 import { todayMadrid } from '../lib/dates.ts';
 import { formatDate, formatDays, formatEUR } from '../lib/format.ts';
 import { failureMessage } from '../lib/messages.ts';
@@ -44,16 +45,7 @@ function claimBlocker(
   }
   if (!invoice.overdue) return 'La factura todavía no ha vencido.';
   if (debtor === null) return 'Cargando los datos del deudor…';
-  switch (debtor.kind) {
-    case 'BUSINESS':
-      return null;
-    case 'UNKNOWN':
-      return 'Marca al deudor como empresa o autónomo para poder reclamar.';
-    case 'CONSUMER':
-      return 'Reclama no reclama a consumidores: quedan fuera de la ley de morosidad.';
-    case 'PUBLIC_ADMIN':
-      return 'Reclama no tramita reclamaciones a administraciones públicas.';
-  }
+  return debtorBlocker(debtor.kind);
 }
 
 function Facts({
