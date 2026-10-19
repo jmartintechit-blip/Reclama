@@ -20,6 +20,41 @@ import {
 import { useLoad } from '../lib/use-api.ts';
 import { ErrorSummary, TextField } from './Field.tsx';
 
+// One key per attempt to send, kept in sessionStorage (not only in memory) so a reload while the
+// email is in flight repeats the key and the server cannot send twice. It is dropped once the
+// attempt has an answer that settles it (sent, or "already sent"). Without storage it still works
+// for the life of the page.
+const keyName = (claimId: string) => `reclama:email-key:${claimId}`;
+const memoryKeys = new Map<string, string>();
+
+function takeKey(claimId: string): string {
+  const name = keyName(claimId);
+  try {
+    const stored = sessionStorage.getItem(name);
+    if (stored !== null) return stored;
+  } catch {
+    // storage blocked: fall through to the in-memory key
+  }
+  const key = memoryKeys.get(name) ?? crypto.randomUUID();
+  memoryKeys.set(name, key);
+  try {
+    sessionStorage.setItem(name, key);
+  } catch {
+    // storage blocked: the in-memory key is all there is
+  }
+  return key;
+}
+
+function dropKey(claimId: string): void {
+  const name = keyName(claimId);
+  memoryKeys.delete(name);
+  try {
+    sessionStorage.removeItem(name);
+  } catch {
+    // nothing to remove
+  }
+}
+
 // The debtor has no address yet: ask for it here, so the person does not have to leave the claim.
 function DebtorEmailForm({
   debtorId,
@@ -129,20 +164,22 @@ function SendResult({ sent }: { sent: EmailSent }) {
 function SendLetter({
   claimId,
   debtorEmail,
+  demandSentBefore,
   focusOnMount,
   onRecorded,
 }: {
   claimId: string;
   debtorEmail: string;
+  // The claim already has a recorded "Requerimiento enviado": a second email needs a second yes.
+  demandSentBefore: boolean;
   focusOnMount: boolean;
   onRecorded: () => void;
 }) {
   const { busy, run } = useBusy();
   const [sent, setSent] = useState<EmailSent | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
-  // One key per "attempt to send": a retry after a network error or a 502 (the email may have gone
-  // out) repeats it so the server does not send twice; it is renewed once the attempt is settled.
-  const key = useRef<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const again = demandSentBefore || sent?.mode === 'live';
   const button = useRef<HTMLButtonElement>(null);
   const wasBusy = useRef(false);
 
@@ -160,20 +197,20 @@ function SendLetter({
     void run(async () => {
       setSent(null);
       setFailure(null);
-      key.current ??= crypto.randomUUID();
+      setConfirming(false);
       const result = await api<EmailSent>(
         'POST',
         `/api/claims/${encodeURIComponent(claimId)}/email`,
         undefined,
-        { 'Idempotency-Key': key.current },
+        { 'Idempotency-Key': takeKey(claimId) },
       );
       if (!result.ok) {
         // 409: that key already sent an email, so pressing again must be a new send.
-        if (result.code === 'EMAIL_ALREADY_SENT') key.current = null;
+        if (result.code === 'EMAIL_ALREADY_SENT') dropKey(claimId);
         setFailure(result);
         return;
       }
-      key.current = null;
+      dropKey(claimId);
       setSent(result.data);
       if (result.data.event_recorded) onRecorded();
     });
@@ -193,11 +230,46 @@ function SendLetter({
           type="button"
           className="btn primary"
           disabled={busy}
-          onClick={send}
+          onClick={
+            again
+              ? () => {
+                  setConfirming(true);
+                }
+              : send
+          }
         >
-          {busy ? 'Enviando…' : 'Enviar la carta por email'}
+          {busy
+            ? 'Enviando…'
+            : again
+              ? 'Enviar otra vez'
+              : 'Enviar la carta por email'}
         </button>
       </div>
+      {confirming && !busy ? (
+        <div className="notice" role="group" aria-labelledby="reenviar-titulo">
+          <p id="reenviar-titulo">
+            <b>¿Enviar el requerimiento otra vez?</b>
+          </p>
+          <p>
+            Esta reclamación ya tiene un requerimiento enviado. Si lo envías de
+            nuevo, el deudor recibirá un segundo correo con la carta.
+          </p>
+          <div className="actions">
+            <button type="button" className="btn danger" onClick={send}>
+              Sí, enviar otra vez
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setConfirming(false);
+              }}
+            >
+              No, no enviar
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div role="status" className="live">
         {busy ? <p className="note">Enviando el email…</p> : null}
         {sent ? <SendResult sent={sent} /> : null}
@@ -267,6 +339,9 @@ export function ClaimEmail({
       <SendLetter
         claimId={claim.id}
         debtorEmail={result.data.debtor.email}
+        demandSentBefore={claim.events.some(
+          (event) => event.kind === 'DEMAND_SENT',
+        )}
         focusOnMount={justSaved}
         onRecorded={onRecorded}
       />

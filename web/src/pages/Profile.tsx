@@ -103,6 +103,7 @@ function ProfileForm() {
   return (
     <form
       ref={form}
+      method="post"
       className="sheet form"
       noValidate
       aria-busy={busy}
@@ -248,7 +249,13 @@ function DeleteAccount() {
         reclamaciones. No se puede deshacer.
       </p>
       {confirming ? (
-        <form ref={form} className="form" noValidate onSubmit={submit}>
+        <form
+          ref={form}
+          method="post"
+          className="form"
+          noValidate
+          onSubmit={submit}
+        >
           <ErrorSummary errors={errors} labels={LABELS} />
           <TextField
             label="Escribe tu contraseña para confirmar"

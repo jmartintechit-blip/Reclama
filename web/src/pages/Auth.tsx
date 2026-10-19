@@ -132,6 +132,7 @@ function AuthForm({ mode }: { mode: Mode }) {
       ) : null}
       <form
         ref={form}
+        method="post"
         className="sheet form"
         noValidate
         aria-busy={busy}

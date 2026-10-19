@@ -11,6 +11,12 @@ import { addDays } from './dates.ts';
 import { formatEUR } from './format.ts';
 
 describe('fillTemplate', () => {
+  it('does not read inherited properties as values', () => {
+    expect(fillTemplate('{{constructor}}', {}).missing).toEqual([
+      'constructor',
+    ]);
+  });
+
   it('fills every placeholder, each occurrence', () => {
     expect(
       fillTemplate('{{a}} y {{b}}; otra vez {{a}}', { a: 'uno', b: 'dos' }),

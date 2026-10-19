@@ -95,6 +95,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  sessionStorage.clear();
 });
 
 describe('ClaimDetailPage', () => {
@@ -901,7 +902,10 @@ describe('ClaimDetailPage', () => {
     // Presses the button and waits until it is idle again.
     const press = async (user: ReturnType<typeof userEvent.setup>) => {
       await user.click(await screen.findByRole('button', { name: SEND }));
-      await screen.findByRole('button', { name: SEND });
+      // After a real send the button offers to send again, behind a confirmation.
+      await screen.findByRole('button', {
+        name: /^Enviar (la carta por email|otra vez)$/,
+      });
     };
 
     it('says before the click that in the demo and in test mode nothing reaches the debtor', async () => {
@@ -1005,6 +1009,81 @@ describe('ClaimDetailPage', () => {
       expect(third).toBe(first);
       expect(fourth).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
       expect(fourth).not.toBe(third);
+    });
+
+    it('keeps the key across a reload, so a send lost in flight cannot go out twice', async () => {
+      const api = script({ [EMAIL]: [networkError, sent()] });
+      renderApp(PATH);
+      const user = userEvent.setup();
+      await press(user);
+      await inMain().findByRole('alert');
+      cleanup(); // the person reloads the page: memory is gone, sessionStorage is not
+      renderApp(PATH);
+      await press(user);
+      const [first, second] = keysOf(api);
+      expect(second).toBe(first);
+    });
+
+    it('takes the key a previous page load left in the session, and forgets it once sent', async () => {
+      const name = `reclama:email-key:${CLAIM_ID}`;
+      sessionStorage.setItem(name, 'left-by-a-reload-01');
+      const api = script({ [EMAIL]: sent() });
+      renderApp(PATH);
+      const user = userEvent.setup();
+      await press(user);
+      expect(keysOf(api)).toEqual(['left-by-a-reload-01']);
+      expect(sessionStorage.getItem(name)).toBeNull();
+    });
+
+    it('asks before sending a second real email, and sends it with a new key on yes', async () => {
+      const api = script({ [EMAIL]: [live(true), live(true)] });
+      renderApp(PATH);
+      const user = userEvent.setup();
+      await press(user);
+      await screen.findByText(`Carta enviada a ${ADDRESS}.`);
+      await user.click(screen.getByRole('button', { name: 'Enviar otra vez' }));
+      const group = screen.getByRole('group', {
+        name: '¿Enviar el requerimiento otra vez?',
+      });
+      expect(api.count(EMAIL)).toBe(1);
+      await user.click(
+        within(group).getByRole('button', { name: 'No, no enviar' }),
+      );
+      expect(
+        screen.queryByRole('group', {
+          name: '¿Enviar el requerimiento otra vez?',
+        }),
+      ).toBeNull();
+      expect(api.count(EMAIL)).toBe(1);
+      await user.click(screen.getByRole('button', { name: 'Enviar otra vez' }));
+      await user.click(
+        screen.getByRole('button', { name: 'Sí, enviar otra vez' }),
+      );
+      await waitFor(() => {
+        expect(api.count(EMAIL)).toBe(2);
+      });
+      const [first, second] = keysOf(api);
+      expect(second).not.toBe(first);
+    });
+
+    it('asks first when the claim already has a recorded demand, even after a reload', async () => {
+      const api = script({
+        [DETAIL]: json(200, {
+          data: claimDetail({
+            events: [claimEvent({ kind: 'DEMAND_SENT', occurred_on: TODAY })],
+          }),
+        }),
+        [EMAIL]: sent(),
+      });
+      renderApp(PATH);
+      const user = userEvent.setup();
+      await user.click(
+        await screen.findByRole('button', { name: 'Enviar otra vez' }),
+      );
+      expect(
+        screen.getByRole('group', { name: /Enviar el requerimiento/ }),
+      ).toBeTruthy();
+      expect(api.count(EMAIL)).toBe(0);
     });
 
     it('starts a new attempt after a 409, because that key already sent an email', async () => {

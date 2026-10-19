@@ -80,7 +80,7 @@ export function fillTemplate(
 ): { text: string; missing: string[] } {
   const missing: string[] = [];
   const filled = text.replace(/\{\{([^{}]*)\}\}/g, (_whole, name: string) => {
-    const value = values[name];
+    const value = Object.hasOwn(values, name) ? values[name] : undefined;
     if (value === undefined || value === '') {
       if (!missing.includes(name)) missing.push(name);
       return TEMPLATE_GAP;

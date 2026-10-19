@@ -93,11 +93,20 @@ export function useFocusOnErrors(
 }
 
 // The path remembered by RequireAuth, kept in the router state (never in the URL). It is only
-// followed when it is a path of this app: one slash and not "//host".
+// followed only when it resolves to this app's own origin: one slash, not "//host", and no tab or
+// newline (browsers strip them, so "/	/host" would become "//host").
 export function rememberedPath(state: unknown): string | null {
   if (typeof state !== 'object' || state === null || !('from' in state)) {
     return null;
   }
   const from = state.from;
-  return typeof from === 'string' && /^\/(?![/\\])/.test(from) ? from : null;
+  if (typeof from !== 'string' || !from.startsWith('/')) return null;
+  try {
+    return new URL(from, window.location.origin).origin ===
+      window.location.origin
+      ? from
+      : null;
+  } catch {
+    return null;
+  }
 }

@@ -40,8 +40,16 @@ export function Privacy() {
 
       <h2>Borrar tus datos</h2>
       <p>
-        Podrás borrar tu cuenta y todos tus datos desde la pantalla de perfil
-        cuando esté disponible.
+        Puedes borrar tu cuenta y todos tus datos desde la pantalla de perfil
+        (en la demo no hace falta: caduca sola).
+      </p>
+
+      <h2>Tu dirección IP</h2>
+      <p>
+        Para frenar el abuso (demasiados intentos de entrar, de registrarse o de
+        abrir demos), la API cuenta los intentos por dirección IP. Es un
+        contador de corta duración: las filas se eliminan solas a partir de los
+        dos días. No se usa para nada más.
       </p>
 
       <h2>La demo</h2>

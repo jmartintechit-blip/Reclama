@@ -88,6 +88,17 @@ describe('route guards', () => {
     });
   });
 
+  it.each(['/\t/evil.example', '/\n/evil.example', '/\\evil.example'])(
+    'ignores a remembered path a browser would read as another site (%j)',
+    async (from) => {
+      mockApi({ 'GET /api/me': me() });
+      const router = renderApp('/entrar', { from });
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe('/panel');
+      });
+    },
+  );
+
   it('lets a demo user see /registro (a real account is the way out of the demo)', async () => {
     mockApi({ 'GET /api/me': me({ is_demo: true }) });
     const router = await renderAt('/registro');

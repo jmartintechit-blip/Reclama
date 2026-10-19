@@ -203,6 +203,8 @@ describe('Privacy', () => {
     expect(text).toContain('una única cookie, la de sesión');
     expect(text).toContain('Estados Unidos');
     expect(text).toContain('24 horas');
+    expect(text).toContain('por dirección IP');
+    expect(text).not.toContain('cuando esté disponible');
   });
 });
 
