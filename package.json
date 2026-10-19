@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env server/dev.ts",
+    "dev:memory": "node server/dev-memory.ts",
     "web:dev": "vite web",
     "web:build": "vite build web",
     "build": "npm run typecheck && npm run migrate && npm run rates:seed && npm run web:build",
