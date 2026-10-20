@@ -362,7 +362,7 @@ Not tested:
 - **Concurrency.** PGlite has one connection, so races cannot be reproduced. For the payment trigger, `payments.test.ts` simulates the statement that loses the race. I did not find the same for the one-claim-per-invoice index or the email key.
 - Real Neon, Resend and Netlify behaviour. The Resend client is tested with a scripted `fetch`.
 - Beyond the one demo-flow browser test: visual regression, load or performance, other browsers, and assistive-technology use.
-- The two deploy-time facts recorded in `netlify.toml` (the pdfkit bundle, `/api/*` taking precedence over the SPA fallback) were checked on the deployed branch build: the PDF endpoint answers a real PDF and `/api/health` answers JSON.
+- The two deploy-time facts recorded in `netlify.toml` (the pdfkit bundle, `/api/*` taking precedence over the SPA fallback) were checked on the deployed builds: the PDF endpoint answers a real PDF and `/api/health` answers JSON.
 
 ## 9. Deployment and operations
 
@@ -374,7 +374,7 @@ Not tested:
 - **Database.** One pool per warm instance, `max: 3`, 5 s connect and statement timeouts, 10 s idle timeout. Neon's free tier suspends idle compute, so the first request after a pause can be slow (stated in the README, not measured here).
 - **Function time.** The mailer gives up after 6 s because the comment assumes Netlify's default 10 s Function limit.
 - **Environment variables.** The five names listed in section 7, set in the Netlify UI.
-- **A release.** A push to `main` triggers a Netlify build on the branch deploy that serves the demo. Migrations and the rate seed run in that build, then the site and Function are published. There is no staged rollout. Migrations cannot be undone, so a destructive one has no way back. Nothing in the repository requires a migration to work with the previous Function version.
+- **A release.** Production is the `release` branch (`reclama-app.netlify.app`). Each production deploy costs credits on the Netlify plan, so `release` is only moved for a version. A push to `main` builds the free branch deploy `main--reclama-app.netlify.app`. In either build, migrations and the rate seed run first, then the site and Function are published. There is no staged rollout. Migrations cannot be undone, so a destructive one has no way back. Nothing in the repository requires a migration to work with the previous Function version.
 - **Health.** `GET /api/health` never touches the database. `GET /api/health/ready` checks that `schema_migrations` has a row and answers 503 `NOT_READY` otherwise.
 - **Rates.** A new semester means a new row in the JSON file, a commit, and a build. After 2026-12-31 there is no verified row and calculations that reach 2027 fail with `RATE_WINDOW`. The demo answers 503 `DEMO_UNAVAILABLE` when the rates do not cover its dates.
 
@@ -388,7 +388,7 @@ The README lists the user-facing ones. Those that matter for the design:
 - **No email verification, password recovery or password change.** Live email is off for this reason.
 - **Partial payments have no idempotency key.** A retried `POST /api/invoices/:id/payments` records a second payment. The trigger prevents overpaying the invoice, and the client locks double submits, but a network retry can duplicate a payment that is smaller than the balance.
 - **Rates expire on 2027-01-01** and are added by hand.
-- **No production deploy.** The demo is a branch deploy. The database is shared by every build; deploy previews skip migrations and the seed for that reason.
+- **One shared database and no custom domain.** Production and the branch deploy use the same Neon database; deploy previews skip migrations and the seed for that reason. The site lives on the default `netlify.app` address.
 - **Interest is simple interest per semester**, one rounding per segment, as in the README. Other readings of the law (compound interest, rounding only on the total) are not offered.
 - **B2B only; Spanish UI only.**
 - **Duplicated client rules** (section 6) can drift from the server. The email pattern and the CSV limits are checked by tests in places; I did not verify every copy.

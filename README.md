@@ -4,13 +4,13 @@ Late payment assistant for Spanish freelancers and small businesses.
 
 [![CI](https://github.com/jmartintechit-blip/Reclama/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jmartintechit-blip/Reclama/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Demo](https://img.shields.io/badge/demo-live-0a6b55.svg)](https://main--reclama-app.netlify.app/demo)
+[![Demo](https://img.shields.io/badge/demo-live-0a6b55.svg)](https://reclama-app.netlify.app/demo)
 
 Reclama computes the default interest an unpaid B2B invoice has earned under Spanish law (Ley 3/2004), builds a formal payment-demand letter as a PDF, and walks you through the next step: reminder, formal demand, burofax, monitorio procedure. The 40 EUR collection-cost compensation is included and configurable.
 
 ![Reclama dashboard with overdue invoices and the interest total](docs/images/dashboard.png)
 
-**[Try the demo](https://main--reclama-app.netlify.app/demo)**. No signup: it creates a fictitious sandbox. The session lasts 2 hours and the data expires after 24 (it is purged when the next sandbox is created). The interface is in Spanish.
+**[Try the demo](https://reclama-app.netlify.app/demo)**. No signup: it creates a fictitious sandbox. The session lasts 2 hours and the data expires after 24 (it is purged when the next sandbox is created). The interface is in Spanish.
 
 > Reclama is an informational tool, not legal advice. See [Known limitations](#known-limitations).
 
@@ -171,7 +171,7 @@ Security reviews of the API and of the web client were done, and their findings 
 - **Soft caps.** The demo allows 200 active sandboxes and accounts have invoice and claim caps (2,000 and 500). These counts are not atomic, so they can be exceeded slightly under concurrent requests.
 - **No password recovery or email verification yet.**
 - **Spanish interface only.** The code, comments and docs are in English.
-- **No production deploy.** The demo is a Netlify branch deploy of `main`, on the default `netlify.app` address.
+- **No custom domain.** The live demo is the Netlify production site (branch `release`) on the default `netlify.app` address. `main` has its own branch deploy.
 
 ## Roadmap
 

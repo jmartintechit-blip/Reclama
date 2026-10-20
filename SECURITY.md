@@ -13,7 +13,7 @@ You can expect a first answer within a week. There is no bounty.
 
 ## Scope
 
-In scope: the code in this repository and the demo at <https://main--reclama-app.netlify.app>.
+In scope: the code in this repository and the demo at <https://reclama-app.netlify.app>.
 
 Out of scope: denial of service by volume, the free-tier limits of Netlify, Neon and Resend, and social engineering.
 
