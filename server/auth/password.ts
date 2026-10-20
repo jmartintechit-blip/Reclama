@@ -1,4 +1,4 @@
-// Password hashing with argon2id from node:crypto (plan 2 and 7). No dependency, and the
+// Password hashing with argon2id from node:crypto. No dependency, and the
 // asynchronous crypto.argon2 runs on the thread pool, so a login does not block the event loop.
 import { argon2, randomBytes, timingSafeEqual } from 'node:crypto';
 
@@ -34,7 +34,7 @@ const fail = (code: PasswordErrorCode): PasswordValidation => ({
 });
 
 // Length is counted in Unicode code points (a 4-byte emoji is one character) on what the
-// user typed. No composition rules and no truncation (plan 7).
+// user typed. No composition rules and no truncation.
 export function validatePassword(plain: unknown): PasswordValidation {
   if (typeof plain !== 'string') return fail('NOT_A_STRING');
   // A code point takes at most 2 UTF-16 units: this avoids iterating a huge string.
@@ -161,7 +161,7 @@ export function needsRehash(stored: string): boolean {
   );
 }
 
-// For a login with an unknown email (plan 7): one argon2id with the current parameters and
+// For a login with an unknown email: one argon2id with the current parameters and
 // a random salt, whose result is thrown away, so that case takes as long as a real
 // verification. Nothing is stored, so there is no fake hash in the repo or in memory.
 export async function verifyAgainstDummy(plain: unknown): Promise<void> {

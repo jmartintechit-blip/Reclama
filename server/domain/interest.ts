@@ -1,4 +1,4 @@
-// Default (late-payment) interest engine, plan 4.2. Pure code: simple interest, ACT/ACT, one
+// Default (late-payment) interest engine. Pure code: simple interest, ACT/ACT, one
 // segment per semester, half-up rounding per segment, all in BigInt so nothing can overflow
 // or drift. The output is plain JSON (strings and integers) because a claim freezes it.
 import { addDays, daysInYear, diffDays, type ISODate } from './dates.ts';
@@ -44,7 +44,7 @@ export interface InterestResult {
   dueDateEstimated: boolean;
 }
 
-// Plan 4.5: the caller turns this into 422 RATE_WINDOW. Semesters look like "2027-H1".
+// The caller turns this into 422 RATE_WINDOW. Semesters look like "2027-H1".
 export class RateWindowError extends Error {
   readonly missingSemesters: string[];
 

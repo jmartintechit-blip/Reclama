@@ -17,7 +17,7 @@ export default defineConfig(
     },
   },
   {
-    // Plan 4.1: money must be exact and the domain must not read the clock by itself.
+    // Money must be exact and the domain must not read the clock by itself.
     files: ['server/domain/**/*.ts', 'server/services/**/*.ts'],
     rules: {
       'no-restricted-globals': [

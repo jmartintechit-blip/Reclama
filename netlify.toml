@@ -9,13 +9,12 @@ publish = "web/dist"
 # pdfkit reads its standard-font data at runtime through createRequire and a "#standard-fonts/*" import
 # map. Inlined into the esbuild bundle that breaks ("Cannot find module '#standard-fonts/Helvetica'", so
 # the PDF endpoint answers 500). As an external module it is shipped, with its own dependencies, next to
-# the bundle. Checked only with a local esbuild emulation: the day-3 deployment check (T07) must prove it.
+# the bundle. Verified on a deployed build: the PDF endpoint answers 200 with a real PDF.
 external_node_modules = ["pdfkit"]
 
 # Single-page app: any path that is not a file serves the app, which then shows its own 404 page.
-# The API function declares its own path (/api/*) and this rule must not capture it. That cannot be
-# checked locally: on the deployed URL, GET /api/health must answer JSON, not the app's HTML. If it
-# answers HTML, add a redirect for /api/* before this one.
+# The API function declares its own path (/api/*) and this rule does not capture it: verified on the
+# deployed URL, where GET /api/health answers JSON and an unknown /api path answers the API's JSON 404.
 [[redirects]]
 from = "/*"
 to = "/index.html"

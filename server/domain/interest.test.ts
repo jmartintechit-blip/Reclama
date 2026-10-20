@@ -63,7 +63,7 @@ function expectSameAsReference(c: Case, result: InterestResult): void {
 const interests = (result: InterestResult) =>
   result.segments.map((s) => s.interest);
 
-describe('worked examples E1-E12 (plan 4.6), checked against the day-by-day reference', () => {
+describe('worked examples, checked against the day-by-day reference', () => {
   const examples: {
     name: string;
     c: Case;
@@ -345,7 +345,7 @@ describe('rounding and overflow (I7)', () => {
   });
 });
 
-describe('out of the supported window (I11, plan 4.5)', () => {
+describe('out of the supported window', () => {
   const missing = (c: Case): string[] => {
     try {
       calc(c);
@@ -374,8 +374,8 @@ describe('out of the supported window (I11, plan 4.5)', () => {
     ).toEqual(['2017-H2']);
   });
 
-  // The plan's I11 says "due 31-12-2017". Interest starts the day AFTER the due date, so the
-  // first day is 2018-01-01 and that semester does exist: no error.
+  // A due date of 31-12-2017 is not out of the window: interest starts the day AFTER the due date,
+  // so the first day is 2018-01-01 and that semester does exist: no error.
   it('due 2017-12-31 is inside the window: its first interest day is 2018-01-01', () => {
     const result = calc({
       principal: 100_000,

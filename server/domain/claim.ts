@@ -1,4 +1,4 @@
-// Claim totals (plan 4.4): default interest per overdue invoice plus the optional EUR 40
+// Claim totals: default interest per overdue invoice plus the optional EUR 40
 // compensation of Ley 3/2004 art. 8. Pure code: no I/O, no clock. The result is plain JSON
 // because a claim freezes it (claims + claim_invoices tables).
 import type { ISODate } from './dates.ts';

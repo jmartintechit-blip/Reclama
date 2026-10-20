@@ -1,4 +1,4 @@
-// Money is always an integer number of cents (plan 4.1). Nothing here uses floats for amounts.
+// Money is always an integer number of cents. Nothing here uses floats for amounts.
 
 declare const centsBrand: unique symbol;
 // The brand makes the compiler refuse a plain `number` where cents are expected.
@@ -41,7 +41,7 @@ function integerDigits(integerPart: string, groupSep: string): string | null {
   return integerPart.split(groupSep).join('');
 }
 
-// Rules from plan 4.8, plus: "1.5" and "1,234.56" are accepted as decimal dot (the last
+// Rules: "1.5" and "1,234.56" are accepted as decimal dot (the last
 // separator wins); spaces or apostrophes as thousands separators are rejected.
 export function parseMoney(text: string): ParseMoneyResult {
   const body = text.trim().replace(CURRENCY_MARK, '').trim();

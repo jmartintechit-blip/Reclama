@@ -23,7 +23,7 @@ const date = (text: string) => text as ISODate;
 
 const AS_OF = '2026-10-30';
 
-// 1,000 EUR due 30-09-2026: 30 days late at 10.40 % = 855 (plan E1).
+// 1,000 EUR due 30-09-2026: 30 days late at 10.40 % = 855.
 const inv1000 = (overrides: Partial<ClaimInvoiceInput> = {}) => ({
   id: 'A',
   principal: toCents(100_000),
@@ -66,7 +66,7 @@ const codeOf = (fn: () => unknown): string | undefined => {
   return undefined;
 };
 
-describe('E13 (plan 4.6, test I10): claim of 1,000 EUR and 500 EUR, 30 days late', () => {
+describe('claim of 1,000 EUR and 500 EUR, 30 days late', () => {
   it.each<[CompensationMode, number, number]>([
     ['PER_INVOICE', 8000, 159_282],
     ['PER_CLAIM', 4000, 155_282],
@@ -154,7 +154,7 @@ describe('which invoices enter the claim', () => {
     expect(claim.lines[0]?.principal).toBe(100_000);
   });
 
-  it('payments reduce the claimed principal and the interest (plan E12)', () => {
+  it('payments reduce the claimed principal and the interest', () => {
     const claim = computeClaim(
       claimOf({
         compensationMode: 'NONE',

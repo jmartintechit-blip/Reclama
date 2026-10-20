@@ -10,7 +10,7 @@ Reclama computes the default interest an unpaid B2B invoice has earned under Spa
 
 ![Reclama dashboard with overdue invoices and the interest total](docs/images/dashboard.png)
 
-**[Try the demo](https://main--reclama-app.netlify.app/demo)**. No signup: it creates a fictitious sandbox: the session lasts 2 hours and the data is deleted after 24. The interface is in Spanish.
+**[Try the demo](https://main--reclama-app.netlify.app/demo)**. No signup: it creates a fictitious sandbox. The session lasts 2 hours and the data expires after 24 (it is purged when the next sandbox is created). The interface is in Spanish.
 
 > Reclama is an informational tool, not legal advice. See [Known limitations](#known-limitations).
 
@@ -163,7 +163,7 @@ Security reviews of the API and of the web client were done, and their findings 
 
 ## Known limitations
 
-- **Email does not reach debtors.** There is no verified sending domain. Resend only delivers to a test address, so in the demo and in sandbox nothing goes to the debtor. Live mode exists in the code but needs a verified domain.
+- **Email does not reach debtors.** On the live demo the send button currently answers "not available" (503) because no Resend key is configured. There is no verified sending domain. Resend only delivers to a test address, so in the demo and in sandbox nothing goes to the debtor. Live mode exists in the code but needs a verified domain.
 - **B2B only.** Claims against consumers and public administrations are blocked. The law covers public administrations, but their payment rules differ and are not implemented.
 - **Rates expire on 2027-01-01.** Until the BOE publishes the next semester, calculations that reach 2027 fail. Each new rate must be added by hand to the JSON file.
 - **Not legal advice.** The escalation waits (7, 10 and 10 days) and the limitation warning (4.5 years) are the app's own heuristics, not legal deadlines. Burofax guidance is common practice, not verified against an official source.

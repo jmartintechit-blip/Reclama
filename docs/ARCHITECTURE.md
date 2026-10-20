@@ -41,7 +41,7 @@ Test files sit next to the code they test (`*.test.ts`, `*.test.tsx`).
 ├── data/                    legal-interest-rates.json (source of truth for rates), sample CSV
 ├── docs/                    LEGAL-SOURCES.md (Spanish), images/, design/ (static sketches and fonts)
 ├── netlify/functions/api.ts the only Netlify-specific file; also the edge rate-limit config
-├── scripts/                 migrate.ts, rates-seed.ts, rates-verify.ts, screenshots.ts
+├── scripts/                 migrate.ts, rates-seed.ts, rates-verify.ts, screenshots.ts, e2e.ts
 ├── server/
 │   ├── app.ts               createApp(): middleware order and route registration
 │   ├── config.ts            email settings from env; defaults to sandbox
@@ -362,7 +362,7 @@ Not tested:
 - **Concurrency.** PGlite has one connection, so races cannot be reproduced. For the payment trigger, `payments.test.ts` simulates the statement that loses the race. I did not find the same for the one-claim-per-invoice index or the email key.
 - Real Neon, Resend and Netlify behaviour. The Resend client is tested with a scripted `fetch`.
 - Beyond the one demo-flow browser test: visual regression, load or performance, other browsers, and assistive-technology use.
-- The deploy-time checks recorded in `netlify.toml` (the pdfkit bundle, `/api/*` taking precedence over the SPA fallback) were verified only locally in those comments. I could not tell from the repository whether they were confirmed on a deploy.
+- The two deploy-time facts recorded in `netlify.toml` (the pdfkit bundle, `/api/*` taking precedence over the SPA fallback) were checked on the deployed branch build: the PDF endpoint answers a real PDF and `/api/health` answers JSON.
 
 ## 9. Deployment and operations
 

@@ -171,7 +171,7 @@ export function verifyRates(rows: readonly LegalRate[]): string[] {
   return problems;
 }
 
-// Plan 4.5: a PENDING row counts as absent, so the interest engine only sees these.
+// A PENDING row counts as absent, so the interest engine only sees these.
 export function verifiedRates(rows: readonly LegalRate[]): LegalRate[] {
   return rows.filter((row) => row.status === 'VERIFIED');
 }
