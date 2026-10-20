@@ -10,7 +10,7 @@ Reclama computes the default interest an unpaid B2B invoice has earned under Spa
 
 ![Reclama dashboard with overdue invoices and the interest total](docs/images/dashboard.png)
 
-**[Try the demo](https://main--reclama-app.netlify.app/demo)**. No signup: it creates a fictitious sandbox that expires after 24 hours. The interface is in Spanish.
+**[Try the demo](https://main--reclama-app.netlify.app/demo)**. No signup: it creates a fictitious sandbox: the session lasts 2 hours and the data is deleted after 24. The interface is in Spanish.
 
 > Reclama is an informational tool, not legal advice. See [Known limitations](#known-limitations).
 
@@ -156,7 +156,7 @@ The repository is set up for Netlify ([`netlify.toml`](netlify.toml)). `npm run 
 - Unsafe methods pass an origin check (`Sec-Fetch-Site` or `Origin`) against CSRF.
 - Registration, login, demo creation and email sending are rate limited with counters in Postgres.
 - The web app ships under a strict CSP (`default-src 'self'`, no inline scripts or styles) plus HSTS and frame, referrer and permissions headers. API answers use `default-src 'none'` and `no-store`.
-- CSV cells that start with `=`, `+`, `-` or `@` are flagged so they cannot become spreadsheet formulas.
+- CSV cells that start with `=`, `+`, `-` or `@` get a warning. They are stored as plain text and the app has no export, so they cannot reach a spreadsheet today; any future export must neutralise them.
 
 Security reviews of the API and of the web client were done, and their findings were fixed. The reviews were assisted by AI tooling, not by a human penetration test.
 
