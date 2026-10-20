@@ -4,7 +4,9 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
-First public version (planned as 0.1.0).
+## [0.1.0] - 2026-10-20
+
+First public version.
 
 ### Added
 
@@ -21,3 +23,6 @@ First public version (planned as 0.1.0).
 ### Known limitations
 
 See the [README](README.md#known-limitations).
+
+[Unreleased]: https://github.com/jmartintechit-blip/Reclama/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jmartintechit-blip/Reclama/releases/tag/v0.1.0
