@@ -6,8 +6,7 @@ Reclama is a portfolio project, not a hosted service with real customers. Its de
 
 Please do not describe a vulnerability in a public issue.
 
-- Use GitHub's private reporting: **Security** tab, then **Report a vulnerability** (if the button is not there, it has not been enabled yet).
-- Otherwise open an issue that only says you have a security report and asks for a private channel. Leave out the details.
+Use GitHub's private reporting: **Security** tab, then **Report a vulnerability**. It stays private between you and the maintainer.
 
 You can expect a first answer within a week. There is no bounty.
 
