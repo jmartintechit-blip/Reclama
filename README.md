@@ -126,6 +126,7 @@ npm test             # Vitest
 npm run lint         # ESLint
 npm run typecheck    # server and web
 npm run format:check # Prettier
+npm run e2e          # demo flow in a real browser (needs Chrome; E2E_CHANNEL=msedge for Edge)
 ```
 
 `npm run screenshots` regenerates the images in `docs/images/`. It needs both dev servers running and Microsoft Edge installed.
@@ -146,7 +147,7 @@ The repository is set up for Netlify ([`netlify.toml`](netlify.toml)). `npm run 
 
 **Tests.** 2,061 Vitest tests in 79 files pass on this commit. The interest engine is checked against an independent reference implementation that walks day by day, and against worked examples. A test recomputes the home-page example from the real rates so it cannot drift.
 
-**CI** ([`ci.yml`](.github/workflows/ci.yml)) runs on every push: lint, typecheck, web build, format check, tests, rate-table verification, and `npm audit --omit=dev`. The audit step is warning-only on purpose, so a new advisory does not block merges.
+**CI** ([`ci.yml`](.github/workflows/ci.yml)) runs on every push: lint, typecheck, web build, format check, tests, rate-table verification, an end-to-end run of the demo flow in a real browser, and `npm audit --omit=dev`. The audit step is warning-only on purpose, so a new advisory does not block merges.
 
 **Security measures:**
 
@@ -183,7 +184,7 @@ Ideas, not promises:
 - Data export.
 - English interface.
 - Online BOE check for new rates.
-- An end-to-end browser test in CI.
+- More browser tests (today there is one: the demo flow).
 
 ## Built with AI assistance
 

@@ -355,13 +355,13 @@ An IPv6 address is reduced to its /64 and an IPv4-mapped address counts as IPv4.
 
 The suite is 79 test files run by one Vitest command. The clock is injected (`Clock`), so tests move time. Tests that encode architecture rules: the route registry, the IDOR matrix, the schema constraint pairs, migration checksum and immutability, the origin guard, security headers, error shapes, the interest reference cross-check, the home-page example recomputation, and `import-columns.test.ts` (the web's column list against the parser). ESLint adds the clock and float bans in the domain and services, `strictTypeChecked`, hooks and a11y rules in `web/`.
 
-`.github/workflows/ci.yml` runs on every push and pull request on Ubuntu with the Node version from `.nvmrc`: `npm ci`, lint, typecheck (server and web), web build, Prettier check, tests, `rates:verify`, and `npm audit --omit=dev` (allowed to fail). `.githooks/pre-commit` runs the same checks before each commit (it retries the tests once because of a Windows-only worker crash noted in the hook).
+`.github/workflows/ci.yml` runs on every push and pull request on Ubuntu with the Node version from `.nvmrc`: `npm ci`, lint, typecheck (server and web), web build, Prettier check, tests, `rates:verify`, an end-to-end run of the demo flow (`scripts/e2e.ts`: the real browser against the in-memory API and the Vite dev server) and `npm audit --omit=dev` (allowed to fail). `.githooks/pre-commit` runs the same checks before each commit (it retries the tests once because of a Windows-only worker crash noted in the hook).
 
 Not tested:
 
 - **Concurrency.** PGlite has one connection, so races cannot be reproduced. For the payment trigger, `payments.test.ts` simulates the statement that loses the race. I did not find the same for the one-claim-per-invoice index or the email key.
 - Real Neon, Resend and Netlify behaviour. The Resend client is tested with a scripted `fetch`.
-- An end-to-end browser test, visual regression, load or performance, and assistive-technology use.
+- Beyond the one demo-flow browser test: visual regression, load or performance, other browsers, and assistive-technology use.
 - The deploy-time checks recorded in `netlify.toml` (the pdfkit bundle, `/api/*` taking precedence over the SPA fallback) were verified only locally in those comments. I could not tell from the repository whether they were confirmed on a deploy.
 
 ## 9. Deployment and operations

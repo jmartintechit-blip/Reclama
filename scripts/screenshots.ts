@@ -3,7 +3,7 @@
 // installed Edge (no browser download) through the demo, so every figure is the fictitious data.
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { chromium, type Page } from 'playwright-core';
+import { chromium, type Page } from '@playwright/test';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:5173';
 const OUT = new URL('../docs/images/', import.meta.url);

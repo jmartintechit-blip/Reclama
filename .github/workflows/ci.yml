@@ -31,7 +31,10 @@ jobs:
         run: npm test
       - name: Verify interest rate table
         run: npm run rates:verify
-      # Warning only (plan section 8): a registry hiccup or a new advisory must not block merges.
+      # Real browser (the Chrome preinstalled on the runner) against the in-memory API: no database needed.
+      - name: End-to-end demo flow
+        run: npm run e2e
+      # Warning only: a registry hiccup or a new advisory must not block merges.
       - name: Audit production dependencies
         run: npm audit --omit=dev
         continue-on-error: true
