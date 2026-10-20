@@ -5,7 +5,7 @@ import { pgTypes } from './types.ts';
 // - max 3: one Function instance handles one request at a time and a request needs one
 //   connection (two if it overlaps a transaction with a read). Every warm instance has its own
 //   pool, so a big `max` would only multiply the connections Neon Free has to serve.
-// - 5 s timeouts (plan section 5): fail fast instead of hanging until the Function times out.
+// - 5 s timeouts: fail fast instead of hanging until the Function times out.
 // - idle 10 s: a frozen Function can wake up with sockets Neon has already closed, so we do
 //   not keep idle connections around for long.
 // TLS is not set here: `sslmode=require` in the connection string turns it on with certificate

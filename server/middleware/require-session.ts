@@ -10,7 +10,7 @@ export interface Session {
   user: SessionUser;
 }
 
-// The session step of the request flow (plan section 1). Every failure (no cookie, garbage,
+// The session step of the request flow. Every failure (no cookie, garbage,
 // unknown token, expired session) gets the same answer: the client never learns why.
 export function createRequireSession(db: Db, clock: Clock): RequestHandler {
   return async (req, res, next) => {

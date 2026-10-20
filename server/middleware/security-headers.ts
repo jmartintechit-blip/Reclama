@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 
-// Set in code because the [[headers]] of netlify.toml are not applied to Netlify Functions (plan section 7).
+// Set in code because the [[headers]] of netlify.toml are not applied to Netlify Functions.
 export const securityHeaders: RequestHandler = (_req, res, next) => {
   res.set({
     'Cache-Control': 'no-store', // answers can hold personal data: no browser or CDN may keep a copy

@@ -1,4 +1,4 @@
-// REFERENCE implementation, used only by tests to cross-check interest.ts (plan T12).
+// REFERENCE implementation, used only by tests to cross-check interest.ts.
 // It deliberately shares no logic with the production engine: it walks DAY BY DAY, works out
 // the semester, the year length, the rate and the balance of each day on its own, adds exact
 // fractions (BigInt numerator/denominator) and only then groups the days into runs to apply

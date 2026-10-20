@@ -91,7 +91,14 @@ function Lines({ claim }: { claim: ClaimDetail }) {
       {claim.lines.map((line) => (
         <details key={line.invoice_id}>
           <summary>Tramos de interés de la factura {line.number}</summary>
-          <div className="tablewrap">
+          <div
+            className="tablewrap"
+            role="region"
+            aria-label={`Tramos de la factura ${line.number}`}
+            // A scrollable region must take keyboard focus (WCAG 2.1.1).
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+            tabIndex={0}
+          >
             <table>
               <caption>
                 Un tramo por cada periodo con el mismo saldo y el mismo tipo

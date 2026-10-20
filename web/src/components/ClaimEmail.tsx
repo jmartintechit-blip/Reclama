@@ -219,10 +219,10 @@ function SendLetter({
   return (
     <>
       <p className="note">
-        En la demo y en el modo de pruebas el email NO sale hacia el deudor: va
-        a una dirección de prueba y no se registra ningún paso. Con el envío
-        real activado llegaría a {debtorEmail} con la carta en PDF adjunta y
-        quedaría registrado el paso «Requerimiento enviado».
+        En la demo y en el modo de pruebas el email NO sale hacia el deudor:
+        como mucho llega a una dirección de pruebas y no se registra ningún
+        paso. Con el envío real activado llegaría a {debtorEmail} con la carta
+        en PDF adjunta y quedaría registrado el paso «Requerimiento enviado».
       </p>
       <div className="actions claim">
         <button

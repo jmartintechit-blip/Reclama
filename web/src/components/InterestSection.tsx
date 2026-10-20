@@ -89,7 +89,14 @@ function Breakdown({
   return (
     <>
       <Timeline {...input} />
-      <div className="tablewrap">
+      <div
+        className="tablewrap"
+        role="region"
+        aria-label="Tramos de interés"
+        // A scrollable region must take keyboard focus (WCAG 2.1.1).
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={0}
+      >
         <table>
           <caption>Los mismos tramos en forma de tabla</caption>
           <thead>

@@ -1,4 +1,4 @@
-// The route registry (plan section 5). Every endpoint is declared with defineRoute, which
+// The route registry. Every endpoint is declared with defineRoute, which
 // (1) installs it on the Express app and (2) records it in a list that tests can read, so a test
 // can prove "every route without a cookie answers 401, except the public ones".
 import { isIPv6 } from 'node:net';
@@ -33,7 +33,7 @@ export interface RouteContext<TAuth extends RouteAuth, TBody, TQuery> {
   session: TAuth extends 'session' ? Session : undefined;
 }
 
-// Fixed-window limit per key (plan section 5). `key` receives the VALIDATED body, the
+// Fixed-window limit per key. `key` receives the VALIDATED body, the
 // caller's IP and, on routes with auth 'session', the session; build it from the IP or the user
 // id and, for personal data such as an email, from a hash (hashKeyPart). `name` prefixes the
 // stored key, so two routes never share a counter by accident.

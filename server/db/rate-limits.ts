@@ -22,7 +22,7 @@ export function hashKeyPart(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-// Fixed-window counter (plan section 5). Windows start at multiples of their length counted
+// Fixed-window counter. Windows start at multiples of their length counted
 // from the epoch, and `now` comes from the injected clock. The count is ONE atomic statement,
 // so two simultaneous requests can never read the same value. A database error is not caught:
 // the caller fails closed (500) instead of letting the request through unlimited.

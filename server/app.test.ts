@@ -20,7 +20,7 @@ import { close, listen } from './test-utils.ts';
 const UUID_V4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-// The error shape of plan section 5, whose request_id must be the one sent in the X-Request-Id header.
+// The error envelope of the API, whose request_id must be the one sent in the X-Request-Id header.
 function errorBody(res: Response, code: string, message: string) {
   return {
     error: { code, message, request_id: res.headers.get('x-request-id') },

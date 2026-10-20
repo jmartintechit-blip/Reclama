@@ -1,4 +1,4 @@
-// Session tokens and the session cookie (plan sections 2, 3 and 7). The browser keeps the
+// Session tokens and the session cookie. The browser keeps the
 // token; the database keeps only its SHA-256, so a leaked sessions table cannot be used to log in.
 import { createHash, randomBytes } from 'node:crypto';
 import type { Response } from 'express';

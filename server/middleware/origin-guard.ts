@@ -37,7 +37,7 @@ function hasBody(headers: IncomingHttpHeaders): boolean {
   );
 }
 
-// Anti-CSRF (plan section 7), run BEFORE the body is read. There is no CORS on purpose: no
+// Anti-CSRF, run BEFORE the body is read. There is no CORS on purpose: no
 // Access-Control-* header is sent anywhere, so browsers never let another site read an answer.
 export const originGuard: RequestHandler = (req, res, next) => {
   if (UNSAFE_METHODS.has(req.method)) {

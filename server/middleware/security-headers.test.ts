@@ -17,7 +17,7 @@ import { errorHandler } from './errors.ts';
 import { requestId } from './request-id.ts';
 import { securityHeaders } from './security-headers.ts';
 
-// The three headers of plan section 7.
+// The three security headers.
 async function expectSecurityHeaders(res: Response) {
   await res.arrayBuffer(); // read the body to the end, so the connection is released
   expect(res.headers.get('cache-control')).toBe('no-store');
@@ -82,7 +82,7 @@ describe('securityHeaders on a binary answer', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
-    // A bare app, like the 500 case below: createApp() has no binary route yet (the PDF letter comes in T23).
+    // A bare app with a binary route of its own, like the 500 case below.
     const app = express();
     app.use(securityHeaders);
     app.get('/pdf', (_req, res) => {

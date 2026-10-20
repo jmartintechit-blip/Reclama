@@ -460,7 +460,7 @@ Each record states the context as the code and its comments describe it, the dec
 - **Context:** `config.ts` explains it: without a verified sending domain Resend delivers only to the account owner, and an endpoint that sends a letter to any address its caller types would be a spam vector. Anyone can open a demo with no email check.
 - **Decision:** `EMAIL_MODE` defaults to `sandbox` and anything other than exactly `live` stays there. Demo users are always in sandbox. A sandbox send goes to the test recipient, is marked `[PRUEBA]` and records no escalation event. The provider is called through `fetch` with an idempotency key, a 6 s timeout and error text dropped.
 - **Alternatives not chosen:** sending to the debtor from the first release; a Resend SDK.
-- **Cost:** The product does not reach real debtors until a domain is verified. The sandbox path and the live path share the code, but only the sandbox has been exercised against the real service (not verified for live).
+- **Cost:** The product does not reach real debtors until a domain is verified. The sandbox path and the live path share the code, but neither has been exercised against the real service yet: no Resend API key is configured on the deployment.
 
 ### ADR-9: PGlite for tests and the dev server
 

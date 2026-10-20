@@ -180,7 +180,14 @@ export function PaymentsSection({
       {payments.length === 0 ? (
         <p className="note">Todavía no hay cobros registrados.</p>
       ) : (
-        <div className="tablewrap">
+        <div
+          className="tablewrap"
+          role="region"
+          aria-label="Cobros registrados"
+          // A scrollable region must take keyboard focus (WCAG 2.1.1).
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+          tabIndex={0}
+        >
           <table>
             <caption>Cobros registrados en esta factura</caption>
             <thead>

@@ -5,7 +5,7 @@ import { close, listen } from '../test-utils.ts';
 import { getRegisteredRoutes, type RegisteredRoute } from './routes.ts';
 
 // The only routes that may answer without a session. Adding a public route to the app makes
-// the second test fail until a human adds it here on purpose (plan sections 5 and 7).
+// the second test fail until a human adds it here on purpose.
 const PUBLIC_ROUTES = [
   'GET /api/health',
   'GET /api/health/ready',
