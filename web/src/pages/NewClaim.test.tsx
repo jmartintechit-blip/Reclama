@@ -281,6 +281,8 @@ describe('NewClaim: the form', () => {
     expect(document.activeElement).toBe(legal());
     expect(legal().getAttribute('aria-invalid')).toBe('true');
     await user.click(legal());
+    expect(legal().getAttribute('aria-invalid')).toBeNull();
+    expect(document.querySelector('.field-error')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Crear reclamación' }));
     await waitFor(() => {
       expect(api.count(CREATE)).toBe(1);

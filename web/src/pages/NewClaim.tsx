@@ -100,6 +100,8 @@ function ClaimForm({
   const form = useRef<HTMLFormElement>(null);
   const invoicesError = useId();
   const acceptError = useId();
+  // The error belongs to the unticked box: ticking it answers it.
+  const showAcceptError = !accepted && Boolean(errors.fields.accept);
   useFocusOnErrors(errors, form);
 
   const chosen = selected ?? new Set(candidates.map((invoice) => invoice.id));
@@ -318,8 +320,8 @@ function ClaimForm({
             <input
               type="checkbox"
               checked={accepted}
-              aria-invalid={errors.fields.accept ? true : undefined}
-              aria-describedby={errors.fields.accept ? acceptError : undefined}
+              aria-invalid={showAcceptError ? true : undefined}
+              aria-describedby={showAcceptError ? acceptError : undefined}
               onChange={(event) => {
                 setAccepted(event.target.checked);
               }}
@@ -327,7 +329,7 @@ function ClaimForm({
             Entiendo que Reclama es una herramienta informativa de ayuda al
             cobro, no asesoramiento jurídico.
           </label>
-          {errors.fields.accept ? (
+          {showAcceptError ? (
             <p id={acceptError} className="field-error">
               {errors.fields.accept}
             </p>
