@@ -5,11 +5,12 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
-import { chromium, expect } from '@playwright/test';
+import { type Browser, chromium, expect } from '@playwright/test';
 
 const API = 'http://127.0.0.1:3000/api/health';
 const BASE = 'http://localhost:5173';
 const started: ChildProcess[] = [];
+let browser: Browser | undefined;
 
 async function answers(url: string): Promise<boolean> {
   try {
@@ -40,7 +41,7 @@ try {
   await ensure(API, ['server/dev-memory.ts']);
   await ensure(BASE, ['node_modules/vite/bin/vite.js', 'web']);
 
-  const browser = await chromium.launch({
+  browser = await chromium.launch({
     channel: process.env.E2E_CHANNEL ?? 'chrome',
   });
   const page = await (
@@ -82,7 +83,10 @@ try {
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Descargar carta (PDF)' }).click(),
   ]);
-  expect(download.suggestedFilename()).toBe('requerimiento-fa-2025-001.pdf');
+  // A claim with several invoices is named after the claim, not after one invoice.
+  expect(download.suggestedFilename()).toMatch(
+    /^requerimiento-[0-9a-f]{8}\.pdf$/,
+  );
   const file = await download.path();
   expect((await readFile(file)).subarray(0, 5).toString('latin1')).toBe(
     '%PDF-',
@@ -112,11 +116,12 @@ try {
   await expect(page.getByText('Reclamación cancelada.')).toBeVisible();
 
   expect(loud).toEqual([]);
-  await browser.close();
   console.log('E2E demo flow: OK');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
 } finally {
+  // Also on failure: an open browser would keep the process (and the CI job) alive.
+  await browser?.close();
   await stop();
 }
