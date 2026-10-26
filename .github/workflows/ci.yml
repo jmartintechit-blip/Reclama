@@ -34,7 +34,7 @@ jobs:
       # Real browser (the Chrome preinstalled on the runner) against the in-memory API: no database needed.
       - name: End-to-end demo flow
         run: npm run e2e
-      # Warning only: a registry hiccup or a new advisory must not block merges.
+      # Gate: a high or critical advisory in production dependencies fails the build.
+      # If a registry hiccup fails it, re-run the job; a known unfixable advisory goes in docs, not here.
       - name: Audit production dependencies
-        run: npm audit --omit=dev
-        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
