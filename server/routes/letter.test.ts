@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { letterFilename } from './letter.ts';
 import { hashKeyPart } from '../db/rate-limits.ts';
 import { extractPdfText, summarizePdf } from '../pdf-test-utils.ts';
 import {
@@ -357,6 +358,15 @@ describe('GET /api/claims/:id/letter.pdf', () => {
     expect(res.headers.get('content-disposition')).toBe(
       `attachment; filename="requerimiento-${claimId.slice(0, 8)}.pdf"`,
     );
+  });
+
+  it('names the letter after the claim, not after one invoice, when it has several', () => {
+    const claim = {
+      id: '12345678-aaaa-bbbb-cccc-dddddddddddd',
+      lines: [{ number: 'F-1' }, { number: 'F-2' }],
+    } as unknown as Parameters<typeof letterFilename>[0];
+
+    expect(letterFilename(claim)).toBe('requerimiento-12345678.pdf');
   });
 
   it('answers 401 without a session', async () => {

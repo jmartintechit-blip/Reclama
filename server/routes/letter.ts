@@ -44,9 +44,10 @@ export function profileProblems(profile: Profile | null): ValidationDetail[] {
 }
 
 // ASCII only and made of the claim, never of raw user text: lower-case letters, digits and
-// hyphens from the first invoice number, or the start of the claim id when none is left.
+// hyphens from the invoice number when the claim has a single invoice, or the start of the claim
+// id when it has several (one invoice's number would misname the letter) or none is left.
 export function letterFilename(claim: ClaimDetail): string {
-  const slug = (claim.lines[0]?.number ?? '')
+  const slug = (claim.lines.length === 1 ? (claim.lines[0]?.number ?? '') : '')
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
