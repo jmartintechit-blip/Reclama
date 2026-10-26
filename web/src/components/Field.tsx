@@ -83,6 +83,29 @@ export function TextAreaField({
   );
 }
 
+export function SelectField({
+  label,
+  hint,
+  error,
+  children,
+  ...input
+}: FieldBase & Omit<ComponentProps<'select'>, 'id' | 'aria-describedby'>) {
+  const id = useId();
+  return (
+    <Shell id={id} label={label} hint={hint} error={error}>
+      <select
+        {...input}
+        id={id}
+        className="input"
+        aria-describedby={describedBy(id, hint, error)}
+        aria-invalid={error ? true : undefined}
+      >
+        {children}
+      </select>
+    </Shell>
+  );
+}
+
 // The form-level message. The region exists even when empty: a live region that is added to the
 // page together with its text is announced less reliably than one whose text changes.
 export function ErrorSummary({

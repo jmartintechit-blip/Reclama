@@ -5,6 +5,7 @@ import {
   asOfProblem,
   InterestSection,
 } from '../components/InterestSection.tsx';
+import { InvoiceActions } from '../components/InvoiceActions.tsx';
 import { PaymentsSection } from '../components/PaymentsSection.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import type {
@@ -266,6 +267,8 @@ export function InvoiceDetail() {
           </div>
         </section>
       )}
+
+      <InvoiceActions invoice={invoiceData} onChanged={recorded} />
 
       <div className="actions claim">
         {blocker === null ? (

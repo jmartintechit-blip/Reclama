@@ -22,7 +22,7 @@ Reclama does that arithmetic and paperwork and shows every step of the calculati
 
 ## What it does
 
-- Imports invoices from a Spanish-style CSV (up to 1 MB and 500 rows, with a dry-run preview), or adds them by hand.
+- Imports invoices from a Spanish-style CSV (up to 1 MB and 500 rows, with a dry-run preview), or adds them by hand (and edits, disputes or deletes them).
 - Calculates default interest per invoice: one segment per semester, partial payments, a custom agreed rate, an estimated due date when none is given.
 - Shows the breakdown as a table and a curve, for today or for any other date.
 - Builds a claim for one debtor and freezes its figures. Compensation of 40 EUR can be added per claim, per invoice, or not at all.

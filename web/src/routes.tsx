@@ -10,6 +10,7 @@ import { Demo } from './pages/Demo.tsx';
 import { Home } from './pages/Home.tsx';
 import { ImportCsv } from './pages/ImportCsv.tsx';
 import { InvoiceDetail } from './pages/InvoiceDetail.tsx';
+import { EditInvoice, NewInvoice } from './pages/InvoiceForm.tsx';
 import { Method } from './pages/Method.tsx';
 import { NewClaim } from './pages/NewClaim.tsx';
 import { NotFound } from './pages/NotFound.tsx';
@@ -41,7 +42,9 @@ export const routes: RouteObject[] = [
         element: <RequireAuth />,
         children: [
           { path: 'panel', element: <Dashboard /> },
+          { path: 'facturas/nueva', element: <NewInvoice /> },
           { path: 'facturas/:id', element: <InvoiceDetail /> },
+          { path: 'facturas/:id/editar', element: <EditInvoice /> },
           { path: 'importar', element: <ImportCsv /> },
           { path: 'reclamaciones', element: <ClaimList /> },
           { path: 'reclamaciones/nueva', element: <NewClaim /> },

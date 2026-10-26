@@ -81,10 +81,18 @@ function finish(
   return { ok: true, cents };
 }
 
-export function moneyErrorMessage(error: MoneyError): string {
+// 123456 -> "1234,56": the amount as a person types it, to pre-fill a field when editing.
+export function centsToInput(cents: number): string {
+  return `${String(Math.trunc(cents / 100))},${String(cents % 100).padStart(2, '0')}`;
+}
+
+export function moneyErrorMessage(
+  error: MoneyError,
+  empty = 'Escribe el importe cobrado.',
+): string {
   switch (error) {
     case 'empty':
-      return 'Escribe el importe cobrado.';
+      return empty;
     case 'invalid':
       return 'Escribe solo números, por ejemplo 1.234,56.';
     case 'not_positive':

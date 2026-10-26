@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { StairMark } from '../components/StairMark.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
-import { api, type ApiResult, type Failure } from '../lib/api.ts';
+import { api, type Failure } from '../lib/api.ts';
 import type {
   Debtor,
-  DebtorsPage,
   InvoicesPage,
   InvoiceTotals,
   InvoiceView,
 } from '../lib/api-types.ts';
+import { loadDebtors } from '../lib/debtors.ts';
 import { todayMadrid } from '../lib/dates.ts';
 import { formatDate, formatEUR } from '../lib/format.ts';
 import {
@@ -21,28 +21,8 @@ import {
 import { failureMessage } from '../lib/messages.ts';
 import { useLoad } from '../lib/use-api.ts';
 
-const DEBTOR_PAGE = 100;
 // Mirrors the API: the totals are computed over at most this many invoices.
 const TOTALS_CAP = 2000;
-
-// The list carries the debtor's id, not its name, so the names come from the debtors endpoint
-// (a few pages at most) and are matched here.
-async function loadDebtors(): Promise<ApiResult<Map<string, Debtor>>> {
-  const names = new Map<string, Debtor>();
-  let offset = 0;
-  for (;;) {
-    const result = await api<DebtorsPage>(
-      'GET',
-      `/api/debtors?limit=${String(DEBTOR_PAGE)}&offset=${String(offset)}`,
-    );
-    if (!result.ok) return result;
-    for (const debtor of result.data.debtors) names.set(debtor.id, debtor);
-    offset += result.data.page.limit;
-    if (result.data.debtors.length === 0 || offset >= result.data.page.total) {
-      return { ok: true, data: names };
-    }
-  }
-}
 
 function Skeleton() {
   return (
@@ -89,11 +69,15 @@ function EmptyState() {
       <StairMark />
       <h2>Aún no tienes facturas</h2>
       <p>
-        Importa el CSV que exporta tu programa de facturación y aquí verás
-        cuánto te deben y los intereses de cada factura.
+        Añade una factura o importa el CSV que exporta tu programa de
+        facturación, y aquí verás cuánto te deben y los intereses de cada
+        factura.
       </p>
-      <div>
-        <Link className="btn primary" to="/importar">
+      <div className="actions">
+        <Link className="btn primary" to="/facturas/nueva">
+          Añadir una factura
+        </Link>
+        <Link className="btn" to="/importar">
           Importar CSV
         </Link>
       </div>
@@ -411,6 +395,9 @@ export function Dashboard() {
             del BOE.
           </p>
         </div>
+        <Link className="btn primary" to="/facturas/nueva">
+          Nueva factura
+        </Link>
       </div>
       {body}
     </div>

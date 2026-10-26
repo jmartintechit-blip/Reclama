@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   apiError,
   deferred,
+  empty,
   json,
   me,
   mockApi,
@@ -913,7 +914,12 @@ describe('InvoiceDetail: accessibility', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent),
-    ).toEqual(['Desglose de intereses a 19/10/2026', 'Cobros', 'Deudor']);
+    ).toEqual([
+      'Desglose de intereses a 19/10/2026',
+      'Cobros',
+      'Deudor',
+      'Gestionar la factura',
+    ]);
   });
 
   it('moves focus to the main area when the invoice is opened from the list', async () => {
@@ -954,5 +960,96 @@ describe('InvoiceDetail: accessibility', () => {
       name: 'Factura FA-2025-001',
     });
     expect(document.activeElement).toBe(screen.getByRole('main'));
+  });
+});
+
+describe('InvoiceDetail: manage the invoice', () => {
+  const PATCH = `PATCH /api/invoices/${INVOICE_ID}`;
+  const DELETE = `DELETE /api/invoices/${INVOICE_ID}`;
+
+  it('links to the edit form', async () => {
+    script();
+    await openInvoice();
+    const link = screen.getByRole('link', { name: 'Editar factura' });
+    expect(link.getAttribute('href')).toBe(`/facturas/${INVOICE_ID}/editar`);
+  });
+
+  it('marks the invoice as disputed and loads it again', async () => {
+    const api = script({
+      invoice: [
+        json(200, { data: PAID_ONCE }),
+        json(200, { data: detail({ status: 'DISPUTED' }) }),
+      ],
+      extra: { [PATCH]: json(200, { data: detail({ status: 'DISPUTED' }) }) },
+    });
+    const { user } = await openInvoice();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Marcar como disputada' }),
+    );
+
+    await screen.findByRole('button', { name: 'Quitar la disputa' });
+    expect(api.lastBody(PATCH)).toEqual({ status: 'DISPUTED' });
+  });
+
+  it('has no dispute button once the invoice is paid', async () => {
+    script({
+      invoice: json(200, {
+        data: detail({ status: 'PAID', paid_cents: 184_250, balance_cents: 0 }),
+      }),
+    });
+    await openInvoice();
+    expect(
+      screen.queryByRole('button', { name: /disputa|disputada/ }),
+    ).toBeNull();
+  });
+
+  it('asks before deleting, and goes back to the list after it', async () => {
+    const api = script({
+      extra: {
+        [DELETE]: empty(204),
+        'GET /api/invoices?limit=50&offset=0': json(
+          200,
+          invoicesPage([invoice()]),
+        ),
+        'GET /api/debtors?limit=100&offset=0': json(200, {
+          data: {
+            debtors: [debtor()],
+            page: { limit: 100, offset: 0, total: 1 },
+          },
+        }),
+      },
+    });
+    const { router, user } = await openInvoice();
+
+    await user.click(screen.getByRole('button', { name: 'Borrar factura' }));
+    expect(api.count(DELETE)).toBe(0);
+    await user.click(
+      screen.getByRole('button', { name: 'Sí, borrar la factura' }),
+    );
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/panel');
+    });
+    expect(api.count(DELETE)).toBe(1);
+  });
+
+  it('keeps the invoice when the confirmation is refused', async () => {
+    const api = script();
+    const { user } = await openInvoice();
+    await user.click(screen.getByRole('button', { name: 'Borrar factura' }));
+    await user.click(screen.getByRole('button', { name: 'No, conservarla' }));
+    expect(api.count(DELETE)).toBe(0);
+    expect(screen.getByRole('button', { name: 'Borrar factura' })).toBeTruthy();
+  });
+
+  it('explains that an invoice in a claim cannot be deleted', async () => {
+    script({ extra: { [DELETE]: apiError(409, 'INVOICE_IN_CLAIM') } });
+    const { user } = await openInvoice();
+    await user.click(screen.getByRole('button', { name: 'Borrar factura' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Sí, borrar la factura' }),
+    );
+    expect(await screen.findByText(/está en una reclamación/)).toBeTruthy();
   });
 });
